@@ -56,7 +56,9 @@ If this is round 2+, use `mcp__codex__codex-reply` with the saved threadId to ma
 
 #### Phase B: Parse Assessment
 
-Extract from the response:
+**CRITICAL: Save the FULL raw response** from the external reviewer verbatim (store in a variable for Phase E). Do NOT discard or summarize — the raw text is the primary record.
+
+Then extract structured fields:
 - **Score** (numeric 1-10)
 - **Verdict** ("ready" / "almost" / "not ready")
 - **Action items** (ranked list of fixes)
@@ -91,10 +93,20 @@ Append to `AUTO_REVIEW.md`:
 ```markdown
 ## Round N (timestamp)
 
-### Assessment
+### Assessment (Summary)
 - Score: X/10
 - Verdict: [ready/almost/not ready]
 - Key criticisms: [bullet list]
+
+### Reviewer Raw Response
+
+<details>
+<summary>Click to expand full reviewer response</summary>
+
+[Paste the COMPLETE raw response from the external reviewer here — verbatim, unedited.
+This is the authoritative record. Do NOT truncate or paraphrase.]
+
+</details>
 
 ### Actions Taken
 - [what was implemented/changed]
