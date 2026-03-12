@@ -13,6 +13,15 @@ Generate publishable research ideas for: $ARGUMENTS
 
 Given a broad research direction from the user, systematically generate, validate, and rank concrete research ideas. This skill composes with `/research-lit`, `/novelty-check`, and `/research-review` to form a complete idea discovery pipeline.
 
+## Constants
+
+- **PILOT_MAX_HOURS = 2** — Skip any pilot estimated to take > 2 hours per GPU. Flag as "needs manual pilot".
+- **PILOT_TIMEOUT_HOURS = 3** — Hard timeout: kill pilots exceeding 3 hours. Collect partial results if available.
+- **MAX_PILOT_IDEAS = 3** — Pilot at most 3 ideas in parallel. Additional ideas are validated on paper only.
+- **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget for all pilots combined.
+
+> 💡 Override via argument, e.g., `/idea-creator "topic" — pilot budget: 4h per idea, 20h total`.
+
 ## Workflow
 
 ### Phase 1: Landscape Survey (5-10 min)
@@ -120,7 +129,8 @@ Before committing to a full research effort, run cheap pilot experiments to get 
 
 1. **Design pilots**: For each top idea, define the minimal experiment that would give a positive or negative signal:
    - Single seed, small scale (e.g., small dataset subset, fewer epochs)
-   - Target: 30 min - 2 hours per pilot on 1 GPU
+   - Target: 30 min - PILOT_MAX_HOURS per pilot on 1 GPU
+   - **Estimate GPU-hours BEFORE launching.** If estimated time > PILOT_MAX_HOURS, reduce scale (fewer epochs, smaller subset) or flag as "needs manual pilot"
    - Clear success metric defined upfront (e.g., "if metric improves by > 1%, signal is positive")
 
 2. **Deploy in parallel**: Use `/run-experiment` to launch pilots on different GPUs simultaneously:
@@ -131,10 +141,11 @@ Before committing to a full research effort, run cheap pilot experiments to get 
    ```
    Use `run_in_background: true` to launch all at once.
 
-3. **Collect results**: Use `/monitor-experiment` to check progress. Once all pilots complete, compare:
+3. **Collect results**: Use `/monitor-experiment` to check progress. If any pilot exceeds PILOT_TIMEOUT_HOURS, kill it and collect partial results. Once all pilots complete (or timeout), compare:
    - Which ideas showed positive signal?
    - Which showed null/negative results? (eliminate or deprioritize)
    - Any surprising findings that suggest a pivot?
+   - Total GPU-hours consumed (track against MAX_TOTAL_GPU_HOURS budget)
 
 4. **Re-rank based on empirical evidence**: Update the idea ranking using pilot results. An idea with strong pilot signal jumps ahead of a theoretically appealing but untested idea.
 
