@@ -16,6 +16,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - MAX_ROUNDS = 4
 - POSITIVE_THRESHOLD: score >= 6/10, or verdict contains "accept", "sufficient", "ready for submission"
 - REVIEW_DOC: `AUTO_REVIEW.md` in project root (cumulative log)
+- REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
 
 ## Workflow
 

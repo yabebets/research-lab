@@ -8,6 +8,10 @@ User says "查新", "novelty check", "有没有人做过", "check novelty", or w
 ## allowed-tools
 WebSearch, WebFetch, Grep, Read, Glob, mcp__codex__codex
 
+## Constants
+
+- REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
+
 ## Instructions
 
 Given a method description, systematically verify its novelty:

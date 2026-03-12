@@ -9,6 +9,10 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex,
 
 Get a multi-round critical review of research work from an external LLM with maximum reasoning depth.
 
+## Constants
+
+- REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
+
 ## Context: $ARGUMENTS
 
 ## Prerequisites
