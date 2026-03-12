@@ -1,12 +1,13 @@
+---
+name: novelty-check
+description: Verify research idea novelty against recent literature. Use when user says "查新", "novelty check", "有没有人做过", "check novelty", or wants to verify a research idea is novel before implementing.
+argument-hint: [method-or-idea-description]
+allowed-tools: WebSearch, WebFetch, Grep, Read, Glob, mcp__codex__codex
+---
+
 # Novelty Check Skill
 
-Check whether a proposed method/idea has already been done in the literature.
-
-## Trigger
-User says "查新", "novelty check", "有没有人做过", "check novelty", or wants to verify a research idea is novel before implementing.
-
-## allowed-tools
-WebSearch, WebFetch, Grep, Read, Glob, mcp__codex__codex
+Check whether a proposed method/idea has already been done in the literature: **$ARGUMENTS**
 
 ## Constants
 
@@ -40,7 +41,7 @@ For EACH core claim, search using ALL available sources:
 3. **Read abstracts**: For each potentially overlapping paper, WebFetch its abstract and related work section
 
 ### Phase C: Cross-Model Verification
-Call GPT-5.4 via Codex MCP (`mcp__codex__codex`) with xhigh reasoning:
+Call REVIEWER_MODEL via Codex MCP (`mcp__codex__codex`) with xhigh reasoning:
 ```
 config: {"model_reasoning_effort": "xhigh"}
 ```
