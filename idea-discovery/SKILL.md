@@ -26,8 +26,9 @@ Each phase builds on the previous one's output. The final deliverable is a valid
 - **PILOT_TIMEOUT_HOURS = 3** — Hard timeout: kill any running pilot that exceeds 3 hours. Collect partial results if available.
 - **MAX_PILOT_IDEAS = 3** — Run pilots for at most 3 top ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget across all pilots. If exceeded, skip remaining pilots and note in report.
+- **AUTO_PROCEED = true** — If user doesn't respond at a checkpoint, automatically proceed with the best option after presenting results. Set to `false` to always wait for explicit user confirmation.
 
-> 💡 These are defaults. Override by telling the skill, e.g., `/idea-discovery "topic" — pilot budget: 4h per idea, 20h total`.
+> 💡 These are defaults. Override by telling the skill, e.g., `/idea-discovery "topic" — pilot budget: 4h per idea, 20h total` or `/idea-discovery "topic" — wait for my approval at each step`.
 
 ## Pipeline
 
@@ -52,9 +53,10 @@ Invoke `/research-lit` to map the research landscape:
 - [key findings, gaps, open problems]
 
 Does this match your understanding? Should I adjust the scope before generating ideas?
+(If no response, I'll proceed with the top-ranked direction.)
 ```
 
-- **User approves** → proceed to Phase 2.
+- **User approves** (or no response + AUTO_PROCEED=true) → proceed to Phase 2 with best direction.
 - **User requests changes** (e.g., "focus more on X", "ignore Y", "too broad") → refine the search with updated queries, re-run `/research-lit` with adjusted scope, and present again. Repeat until the user is satisfied.
 
 ### Phase 2: Idea Generation + Filtering + Pilots
@@ -83,9 +85,10 @@ Invoke `/idea-creator` with the landscape context:
 3. [Idea 3] — Pilot: NEGATIVE, eliminated
 
 Which ideas should I validate further? Or should I regenerate with different constraints?
+(If no response, I'll proceed with the top-ranked ideas.)
 ```
 
-- **User picks ideas** → proceed to Phase 3 with selected ideas.
+- **User picks ideas** (or no response + AUTO_PROCEED=true) → proceed to Phase 3 with top-ranked ideas.
 - **User unhappy with all ideas** → collect feedback ("what's missing?", "what direction do you prefer?"), update the prompt with user's constraints, and re-run Phase 2 (idea generation). Repeat until the user selects at least 1 idea.
 - **User wants to adjust scope** → go back to Phase 1 with refined direction.
 

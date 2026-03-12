@@ -55,7 +55,7 @@ Recommended: Idea 1. Shall I proceed with implementation?
 - **Reject all ideas** → collect feedback on what's missing, re-run Stage 1 with adjusted research direction. Repeat until the user commits to an idea.
 - **Stop here** → save current state to `IDEA_REPORT.md` for future reference.
 
-> ⚠️ **This is the most important checkpoint.** The rest of the pipeline is expensive (GPU time + multiple review rounds). Do NOT proceed until the user explicitly confirms which idea to pursue.
+> ⚠️ **This gate ALWAYS waits for explicit user confirmation** — unlike `/idea-discovery` checkpoints which can auto-proceed. The rest of the pipeline is expensive (GPU time + multiple review rounds). Do NOT proceed until the user says which idea to pursue.
 
 ### Stage 2: Implementation
 
