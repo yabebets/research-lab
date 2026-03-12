@@ -1,0 +1,150 @@
+---
+name: idea-discovery
+description: "Workflow 1: Full idea discovery pipeline. Orchestrates research-lit → idea-creator → novelty-check → research-review to go from a broad research direction to validated, pilot-tested ideas. Use when user says \"找idea全流程\", \"idea discovery pipeline\", \"从零开始找方向\", or wants the complete idea exploration workflow."
+argument-hint: [research-direction]
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Agent, Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__gemini__chat, mcp__gemini__googleSearch
+---
+
+# Workflow 1: Idea Discovery Pipeline
+
+Orchestrate a complete idea discovery workflow for: **$ARGUMENTS**
+
+## Overview
+
+This skill chains four sub-skills into a single automated pipeline:
+
+```
+/research-lit → /idea-creator → /novelty-check → /research-review
+  (survey)      (brainstorm)    (verify novel)    (critical feedback)
+```
+
+Each phase builds on the previous one's output. The final deliverable is a validated `IDEA_REPORT.md` with ranked ideas, pilot results, and a suggested execution plan.
+
+## Pipeline
+
+### Phase 1: Literature Survey
+
+Invoke `/research-lit` to map the research landscape:
+
+```
+/research-lit "$ARGUMENTS"
+```
+
+**What this does:**
+- Search arXiv, Google Scholar, Semantic Scholar for recent papers
+- Build a landscape map: sub-directions, approaches, open problems
+- Identify structural gaps and recurring limitations
+- Output a literature summary (saved to working notes)
+
+**Checkpoint:** Review the landscape summary. If the direction is too broad or too narrow, adjust before continuing.
+
+### Phase 2: Idea Generation + Filtering + Pilots
+
+Invoke `/idea-creator` with the landscape context:
+
+```
+/idea-creator "$ARGUMENTS"
+```
+
+**What this does:**
+- Brainstorm 8-12 concrete ideas via GPT-5.4 xhigh
+- Filter by feasibility, compute cost, quick novelty search
+- Deep validate top ideas (full novelty check + devil's advocate)
+- Run parallel pilot experiments on available GPUs (top 2-3 ideas)
+- Rank by empirical signal
+- Output `IDEA_REPORT.md`
+
+**Checkpoint:** Review `IDEA_REPORT.md`. Confirm at least 1-2 ideas have positive pilot signal.
+
+### Phase 3: Deep Novelty Verification
+
+For each top idea (positive pilot signal), run a thorough novelty check:
+
+```
+/novelty-check "[top idea 1 description]"
+/novelty-check "[top idea 2 description]"
+```
+
+**What this does:**
+- Multi-source literature search (arXiv, Scholar, Semantic Scholar)
+- Cross-verify with GPT-5.4 xhigh
+- Check for concurrent work (last 3-6 months)
+- Identify closest existing work and differentiation points
+
+**Update `IDEA_REPORT.md`** with deep novelty results. Eliminate any idea that turns out to be already published.
+
+### Phase 4: External Critical Review
+
+For the surviving top idea(s), get brutal feedback:
+
+```
+/research-review "[top idea with hypothesis + pilot results]"
+```
+
+**What this does:**
+- GPT-5.4 xhigh acts as a senior reviewer (NeurIPS/ICML level)
+- Scores the idea, identifies weaknesses, suggests minimum viable improvements
+- Provides concrete feedback on experimental design
+
+**Update `IDEA_REPORT.md`** with reviewer feedback and revised plan.
+
+### Phase 5: Final Report
+
+Finalize `IDEA_REPORT.md` with all accumulated information:
+
+```markdown
+# Idea Discovery Report
+
+**Direction**: $ARGUMENTS
+**Date**: [today]
+**Pipeline**: research-lit → idea-creator → novelty-check → research-review
+
+## Executive Summary
+[2-3 sentences: best idea, key evidence, recommended next step]
+
+## Literature Landscape
+[from Phase 1]
+
+## Ranked Ideas
+[from Phase 2, updated with Phase 3-4 results]
+
+### 🏆 Idea 1: [title] — RECOMMENDED
+- Pilot: POSITIVE (+X%)
+- Novelty: CONFIRMED (closest: [paper], differentiation: [what's different])
+- Reviewer score: X/10
+- Next step: implement full experiment → /auto-review-loop
+
+### Idea 2: [title] — BACKUP
+...
+
+## Eliminated Ideas
+[ideas killed at each phase, with reasons]
+
+## Next Steps
+- [ ] Implement Idea 1
+- [ ] /run-experiment to deploy full-scale experiments
+- [ ] /auto-review-loop to iterate until submission-ready
+- [ ] Or invoke /research-pipeline for the complete end-to-end flow
+```
+
+## Key Rules
+
+- **Don't skip phases.** Each phase filters and validates — skipping leads to wasted effort later.
+- **Checkpoint between phases.** Briefly summarize what was found before moving on.
+- **Kill ideas early.** It's better to kill 10 bad ideas in Phase 3 than to implement one and fail.
+- **Empirical signal > theoretical appeal.** An idea with a positive pilot outranks a "sounds great" idea without evidence.
+- **Document everything.** Dead ends are just as valuable as successes for future reference.
+- **Be honest with the reviewer.** Include negative results and failed pilots in the review prompt.
+
+## Composing with Workflow 2
+
+After this pipeline produces a validated top idea:
+
+```
+/idea-discovery "direction"         ← you are here (Workflow 1)
+implement                           ← write code for the top idea
+/run-experiment                     ← deploy full-scale experiments
+/auto-review-loop "top idea"        ← Workflow 2: iterate until submission-ready
+
+Or use /research-pipeline for the full end-to-end flow.
+```
