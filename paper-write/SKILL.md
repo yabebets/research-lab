@@ -76,7 +76,7 @@ paper/
 
 ### Step 1: Initialize Project
 
-1. Create `paper/` directory
+1. Create `paper/` directory (if it already exists, back up to `paper-backup-{timestamp}/` first)
 2. Copy venue style file (from templates/ or download)
 3. Generate `main.tex` master file with:
    - Document class and packages
@@ -206,7 +206,17 @@ mcp__codex__codex:
 
 Apply feedback and iterate.
 
-### Step 6: Final Checks
+### Step 6: Reverse Outline Test
+
+After drafting all sections, perform a reverse outline (from Research-Paper-Writing-Skills):
+
+1. **Extract topic sentences** — pull the first sentence of every paragraph
+2. **Read them in sequence** — they should form a coherent narrative on their own
+3. **Check claim coverage** — every claim from the Claims-Evidence Matrix must appear
+4. **Check evidence mapping** — every experiment/figure must support a stated claim
+5. **Fix gaps** — if a topic sentence doesn't advance the story, rewrite the paragraph
+
+### Step 7: Final Checks
 
 Before declaring done:
 
