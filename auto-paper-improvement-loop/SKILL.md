@@ -26,6 +26,24 @@ Unlike `/auto-review-loop` (which iterates on **research** — running experimen
 1. **Compiled paper** — `paper/main.pdf` + LaTeX source files
 2. **All section `.tex` files** — concatenated for review prompt
 
+## State Persistence (Compact Recovery)
+
+If the context window fills up mid-loop, Claude Code auto-compacts. To recover, this skill writes `PAPER_IMPROVEMENT_STATE.json` after each round:
+
+```json
+{
+  "current_round": 1,
+  "threadId": "019ce736-...",
+  "last_score": 6,
+  "status": "in_progress",
+  "timestamp": "2026-03-13T21:00:00"
+}
+```
+
+**On startup**: if `PAPER_IMPROVEMENT_STATE.json` exists with `"status": "in_progress"`, read it + `PAPER_IMPROVEMENT_LOG.md` to recover context, then resume from the next round. If `"status": "completed"` or file absent, start fresh.
+
+**After each round**: overwrite the state file. **On completion**: set `"status": "completed"`.
+
 ## Workflow
 
 ### Step 0: Preserve Original

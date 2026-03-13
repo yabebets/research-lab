@@ -18,15 +18,44 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - REVIEW_DOC: `AUTO_REVIEW.md` in project root (cumulative log)
 - REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
 
+## State Persistence (Compact Recovery)
+
+Long-running loops may hit the context window limit, triggering automatic compaction. To survive this, persist state to `REVIEW_STATE.json` after each round:
+
+```json
+{
+  "round": 2,
+  "threadId": "019cd392-...",
+  "status": "in_progress",
+  "last_score": 5.0,
+  "last_verdict": "not ready",
+  "pending_experiments": ["screen_name_1"],
+  "timestamp": "2026-03-13T21:00:00"
+}
+```
+
+**Write this file at the end of every Phase E** (after documenting the round). Overwrite each time — only the latest state matters.
+
+**On completion** (positive assessment or max rounds), set `"status": "completed"` so future invocations don't accidentally resume a finished loop.
+
 ## Workflow
 
 ### Initialization
 
-1. Read project narrative documents, memory files, and any prior review documents
-2. Read recent experiment results (check output directories, logs)
-3. Identify current weaknesses and open TODOs from prior reviews
-4. Initialize round counter = 1
-5. Create/update `AUTO_REVIEW.md` with header and timestamp
+1. **Check for `REVIEW_STATE.json`** in project root:
+   - If it exists AND `status` is `"in_progress"`:
+     - Read the state file to recover `round`, `threadId`, `last_score`, `pending_experiments`
+     - Read `AUTO_REVIEW.md` to restore full context of prior rounds
+     - If `pending_experiments` is non-empty, check if they have completed (e.g., check screen sessions)
+     - Resume from the next round (round = saved round + 1)
+     - Log: "Recovered from context compaction. Resuming at Round N."
+   - If it exists AND `status` is `"completed"`: treat as fresh start (previous loop finished)
+   - If it does not exist: fresh start (normal case)
+2. Read project narrative documents, memory files, and any prior review documents
+3. Read recent experiment results (check output directories, logs)
+4. Identify current weaknesses and open TODOs from prior reviews
+5. Initialize round counter = 1 (unless recovered from state file)
+6. Create/update `AUTO_REVIEW.md` with header and timestamp
 
 ### Loop (repeat up to MAX_ROUNDS)
 
@@ -119,15 +148,18 @@ This is the authoritative record. Do NOT truncate or paraphrase.]
 - [continuing to round N+1 / stopping]
 ```
 
+**Write `REVIEW_STATE.json`** with current round, threadId, score, verdict, and any pending experiments.
+
 Increment round counter → back to Phase A.
 
 ### Termination
 
 When loop ends (positive assessment or max rounds):
 
-1. Write final summary to `AUTO_REVIEW.md`
-2. Update project notes with conclusions
-3. If stopped at max rounds without positive assessment:
+1. Update `REVIEW_STATE.json` with `"status": "completed"`
+2. Write final summary to `AUTO_REVIEW.md`
+3. Update project notes with conclusions
+4. If stopped at max rounds without positive assessment:
    - List remaining blockers
    - Estimate effort needed for each
    - Suggest whether to continue manually or pivot
