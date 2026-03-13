@@ -222,7 +222,7 @@ paper/
 
 ## Typical Score Progression
 
-Based on end-to-end testing on a theory paper (MoLR-MoG, ICLR 2026):
+Based on end-to-end testing on a 9-page ICLR 2026 theory paper:
 
 | Round | Score | Key Improvements |
 |-------|-------|-----------------|
