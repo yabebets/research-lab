@@ -189,6 +189,8 @@ Invoke `/auto-paper-improvement-loop` to polish the paper:
 
 **Output:** Three PDFs for comparison + `PAPER_IMPROVEMENT_LOG.md`.
 
+**Format check** (included in improvement loop Step 8): After final recompilation, auto-detect and fix overfull hboxes (content exceeding margins), verify page count vs venue limit, and ensure compact formatting. Any overfull > 10pt is fixed before generating the final PDF.
+
 ### Phase 6: Final Report
 
 ```markdown

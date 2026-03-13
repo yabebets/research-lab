@@ -142,7 +142,41 @@ cd paper && latexmk -C && latexmk -pdf -interaction=nonstopmode -halt-on-error m
 cp main.pdf main_round2.pdf
 ```
 
-### Step 8: Document Results
+### Step 8: Format Check
+
+After the final recompilation, run a format compliance check:
+
+```bash
+# 1. Page count vs venue limit
+PAGES=$(pdfinfo paper/main.pdf | grep Pages | awk '{print $2}')
+echo "Pages: $PAGES (limit: 9 main body for ICLR/NeurIPS)"
+
+# 2. Overfull hbox warnings (content exceeding margins)
+OVERFULL=$(grep -c "Overfull" paper/main.log 2>/dev/null || echo 0)
+echo "Overfull hbox warnings: $OVERFULL"
+grep "Overfull" paper/main.log 2>/dev/null | head -10
+
+# 3. Underfull hbox warnings (loose spacing)
+UNDERFULL=$(grep -c "Underfull" paper/main.log 2>/dev/null || echo 0)
+echo "Underfull hbox warnings: $UNDERFULL"
+
+# 4. Bad boxes summary
+grep -c "badness" paper/main.log 2>/dev/null || echo "0 badness warnings"
+```
+
+**Auto-fix patterns:**
+
+| Issue | Fix |
+|-------|-----|
+| Overfull hbox in equation | Wrap in `\resizebox` or split with `\split`/`aligned` |
+| Overfull hbox in table | Reduce font (`\small`/`\footnotesize`) or use `\resizebox{\linewidth}{!}{...}` |
+| Overfull hbox in text | Rephrase sentence or add `\allowbreak` / `\-` hints |
+| Over page limit | Move content to appendix, compress tables, reduce figure sizes |
+| Underfull hbox (loose) | Rephrase for better line filling or add `\looseness=-1` |
+
+If any overfull hbox > 10pt is found, fix it and recompile before documenting.
+
+### Step 9: Document Results
 
 Create `PAPER_IMPROVEMENT_LOG.md` in the paper directory:
 
