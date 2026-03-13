@@ -260,8 +260,9 @@ Based on end-to-end testing on a 9-page ICLR 2026 theory paper:
 
 | Round | Score | Key Improvements |
 |-------|-------|-----------------|
-| Round 0 | 4/10 | Baseline: assumption-model mismatch, overclaims, notation issues |
-| Round 1 | 6/10 | Fixed assumptions, softened claims, added interpretation, renamed notation |
-| Round 2 | ~7/10 | Added synthetic validation, formal truncation proposition, stronger limitations |
+| Round 0 | 4/10 (content) | Baseline: assumption-model mismatch, overclaims, notation issues |
+| Round 1 | 6/10 (content) | Fixed assumptions, softened claims, added interpretation, renamed notation |
+| Round 2 | 7/10 (content) | Added synthetic validation, formal truncation proposition, stronger limitations |
+| Round 3 | 5→8.5/10 (format) | Removed hero fig, appendix, compressed conclusion, fixed overfull hbox |
 
-**+3 points in 2 rounds** is typical for a well-structured but rough first draft.
+**+4.5 points across 3 rounds** (2 content + 1 format) is typical for a well-structured but rough first draft. Final: 8 pages main body, 0 overfull hbox, ICLR-compliant.
