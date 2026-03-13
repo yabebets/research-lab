@@ -77,9 +77,11 @@ paper/
 
 ## Workflow
 
-### Step 0: Backup
+### Step 0: Backup and Clean
 
 If `paper/` already exists, back up to `paper-backup-{timestamp}/` before overwriting. Never silently destroy existing work.
+
+**CRITICAL: Clean stale files.** When changing section structure (e.g., 5 sections → 7 sections), delete section files that are no longer referenced by `main.tex`. Stale files (e.g., old `5_conclusion.tex` left behind when conclusion moved to `7_conclusion.tex`) cause confusion and waste space.
 
 ### Step 1: Initialize Project
 
@@ -184,6 +186,18 @@ Process sections in order. For each section:
    - **NEVER fabricate BibTeX entries** — mark unknown ones with `[VERIFY]` comment
 4. Write `references.bib` containing ONLY cited entries (no bloat)
 
+**Automated bib cleaning** — use this Python pattern to extract only cited entries:
+
+```python
+import re
+# 1. Grep all \citep{...} and \citet{...} from all .tex files
+# 2. Extract unique keys (handle multi-cite like \citep{a,b,c})
+# 3. Parse the full .bib file, keep only entries whose key is in the cited set
+# 4. Write the filtered bib
+```
+
+This prevents bib bloat (e.g., 948 lines → 215 lines in testing).
+
 **Citation verification rules (from claude-scholar + Imbad0202):**
 1. Every BibTeX entry must have: author, title, year, venue/journal
 2. Prefer published venue versions over arXiv preprints (if published)
@@ -258,6 +272,8 @@ Before declaring done:
 - [ ] Title is specific and informative (not generic)
 - [ ] Related work is ≥1 full page
 - [ ] references.bib contains ONLY cited entries (no bloat)
+- [ ] **No stale section files** — every .tex in `sections/` is `\input`ed by `main.tex`
+- [ ] **Section files match main.tex** — file numbering and `\input` paths are consistent
 
 ## Key Rules
 

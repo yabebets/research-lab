@@ -154,17 +154,50 @@ grep -c "Citation.*undefined" compile.log
 
 **CRITICAL**: Verify main body fits within MAX_PAGES.
 
-Main body = first page through end of Conclusion section (§5 or §6 depending on structure).
+Main body = first page through end of Conclusion section (not necessarily §5 — could be §6, §7, or §8 depending on structure).
 References and appendix are NOT counted.
 
-To check:
-1. Find the page where Conclusion ends (look for `\bibliography` or `\appendix` in the PDF)
-2. That page number must be ≤ MAX_PAGES
+**Precise check using `pdftotext`:**
+```bash
+# Extract text and find where Conclusion ends vs References begin
+pdftotext main.pdf - | python3 -c "
+import sys
+text = sys.stdin.read()
+pages = text.split('\f')
+for i, page in enumerate(pages):
+    if 'Ethics Statement' in page or 'Reproducibility' in page:
+        print(f'Conclusion ends on page {i+1}')
+    if any(w in page for w in ['References', 'Bibliography']):
+        lines = [l for l in page.split('\n') if l.strip()]
+        for l in lines[:3]:
+            if 'References' in l or 'Bibliography' in l:
+                print(f'References start on page {i+1}')
+                break
+"
+```
+
+If Conclusion ends mid-page and References start on the same page, the main body is that page number (e.g., if both are on page 9, main body = ~8.5 pages, which is fine for a 9-page limit since it leaves room for the References header).
 
 If over limit:
 - Identify which sections are longest
 - Suggest specific cuts (move proofs to appendix, compress tables, tighten writing)
 - Report: "Main body is X pages (limit: MAX_PAGES). Suggestion: move [specific content] to appendix."
+
+### Step 6.5: Stale File Detection
+
+Check for orphaned section files not referenced by `main.tex`:
+
+```bash
+# Find all .tex files in sections/ and check which are \input'ed by main.tex
+for f in paper/sections/*.tex; do
+    base=$(basename "$f")
+    if ! grep -q "$base" paper/main.tex; then
+        echo "WARNING: $f is not referenced by main.tex — consider removing"
+    fi
+done
+```
+
+This prevents confusion from leftover files when section structure changes (e.g., old `5_conclusion.tex` left behind after restructuring to 7 sections).
 
 ### Step 7: Submission Readiness
 

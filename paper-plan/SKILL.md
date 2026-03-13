@@ -66,11 +66,15 @@ Based on TARGET_VENUE and paper content, classify and select structure.
 ```
 1. Introduction (1.5 pages)
 2. Related Work (1 page)
-3. Preliminaries & Problem Setup (1 page)
-4. Main Theoretical Results (2 pages)
-5. Experiments (2 pages)
-6. Conclusion (0.5 pages)
+3. Preliminaries & Modeling (1.5 pages)
+4. Experiments (1.5 pages)
+5. Theory Part A (1.5 pages)
+6. Theory Part B (1.5 pages)
+7. Conclusion (0.5 pages)
+— Total: 9 pages
 ```
+Theory papers often need 7 sections (splitting theory into estimation + optimization, or setup + analysis). The total page budget MUST sum to MAX_PAGES.
+
 Theory papers should:
 - Include **proof sketch** locations (not just theorem statements)
 - Plan a **comparison table** of prior theoretical bounds vs. this paper's bounds
@@ -211,6 +215,7 @@ Save the final outline to `PAPER_PLAN.md` in the project root:
 **Type**: [empirical/theory/method]
 **Date**: [today]
 **Page budget**: [MAX_PAGES] pages (main body to Conclusion end, excluding references & appendix)
+**Section count**: [N] (must match the number of section files that will be created)
 
 ## Claims-Evidence Matrix
 [from Step 1]
