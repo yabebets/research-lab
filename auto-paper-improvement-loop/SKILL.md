@@ -1,0 +1,233 @@
+---
+name: auto-paper-improvement-loop
+description: "Autonomously improve a generated paper via GPT-5.4 xhigh review → implement fixes → recompile, for 2 rounds. Use when user says \"改论文\", \"improve paper\", \"论文润色循环\", \"auto improve\", or wants to iteratively polish a generated paper."
+argument-hint: [paper-directory]
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
+---
+
+# Auto Paper Improvement Loop: Review → Fix → Recompile
+
+Autonomously improve the paper at: **$ARGUMENTS**
+
+## Context
+
+This skill is designed to run **after** Workflow 3 (`/paper-plan` → `/paper-figure` → `/paper-write` → `/paper-compile`). It takes a compiled paper and iteratively improves it through external LLM review.
+
+Unlike `/auto-review-loop` (which iterates on **research** — running experiments, collecting data, rewriting narrative), this skill iterates on **paper writing quality** — fixing theoretical inconsistencies, softening overclaims, adding missing content, and improving presentation.
+
+## Constants
+
+- **MAX_ROUNDS = 2** — Two rounds of review→fix→recompile. Empirically, Round 1 catches structural issues (4→6/10), Round 2 catches remaining presentation issues (6→7/10). Diminishing returns beyond 2 rounds for writing-only improvements.
+- **REVIEWER_MODEL = `gpt-5.4`** — Model used via Codex MCP for paper review.
+- **REVIEW_LOG = `PAPER_IMPROVEMENT_LOG.md`** — Cumulative log of all rounds, stored in paper directory.
+
+## Inputs
+
+1. **Compiled paper** — `paper/main.pdf` + LaTeX source files
+2. **All section `.tex` files** — concatenated for review prompt
+
+## Workflow
+
+### Step 0: Preserve Original
+
+```bash
+cp paper/main.pdf paper/main_round0_original.pdf
+```
+
+### Step 1: Collect Paper Text
+
+Concatenate all section files into a single text block for the review prompt:
+
+```bash
+# Collect all sections in order
+for f in paper/sections/*.tex; do
+    echo "% === $(basename $f) ==="
+    cat "$f"
+done > /tmp/paper_full_text.txt
+```
+
+### Step 2: Round 1 Review
+
+Send the full paper text to GPT-5.4 xhigh:
+
+```
+mcp__codex__codex:
+  model: gpt-5.4
+  config: {"model_reasoning_effort": "xhigh"}
+  prompt: |
+    You are reviewing a [VENUE] paper. Please provide a detailed, structured review.
+
+    ## Full Paper Text:
+    [paste concatenated sections]
+
+    ## Review Instructions
+    Please act as a senior ML reviewer ([VENUE] level). Provide:
+    1. **Overall Score** (1-10, where 6 = weak accept, 7 = accept)
+    2. **Summary** (2-3 sentences)
+    3. **Strengths** (bullet list, ranked)
+    4. **Weaknesses** (bullet list, ranked: CRITICAL > MAJOR > MINOR)
+    5. **For each CRITICAL/MAJOR weakness**: A specific, actionable fix
+    6. **Missing References** (if any)
+    7. **Verdict**: Ready for submission? Yes / Almost / No
+
+    Focus on: theoretical rigor, claims vs evidence alignment, writing clarity,
+    self-containedness, notation consistency.
+```
+
+Save the threadId for Round 2.
+
+### Step 3: Implement Round 1 Fixes
+
+Parse the review and implement fixes by severity:
+
+**Priority order:**
+1. CRITICAL fixes (assumption mismatches, internal contradictions)
+2. MAJOR fixes (overclaims, missing content, notation issues)
+3. MINOR fixes (if time permits)
+
+**Common fix patterns:**
+
+| Issue | Fix Pattern |
+|-------|-------------|
+| Assumption-model mismatch | Rewrite assumption to match the model, add formal proposition bridging the gap |
+| Overclaims | Soften language: "validate" → "demonstrate practical relevance", "comparable" → "qualitatively competitive" |
+| Missing metrics | Add quantitative table with honest parameter counts and caveats |
+| Theorem not self-contained | Add "Interpretation" paragraph listing all dependencies |
+| Notation confusion | Rename conflicting symbols globally, add Notation paragraph |
+| Missing references | Add to `references.bib`, cite in appropriate locations |
+| Theory-practice gap | Explicitly frame theory as idealized; add synthetic validation subsection |
+
+### Step 4: Recompile Round 1
+
+```bash
+cd paper && latexmk -C && latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
+cp main.pdf main_round1.pdf
+```
+
+Verify: 0 undefined references, 0 undefined citations.
+
+### Step 5: Round 2 Review
+
+Use `mcp__codex__codex-reply` with the saved threadId:
+
+```
+mcp__codex__codex-reply:
+  threadId: [saved from Round 1]
+  model: gpt-5.4
+  config: {"model_reasoning_effort": "xhigh"}
+  prompt: |
+    [Round 2 update]
+
+    Since your last review, we have implemented:
+    1. [Fix 1]: [description]
+    2. [Fix 2]: [description]
+    ...
+
+    Please re-score and re-assess. Same format:
+    Score, Summary, Strengths, Weaknesses, Actionable fixes, Verdict.
+```
+
+### Step 6: Implement Round 2 Fixes
+
+Same process as Step 3. Typical Round 2 fixes:
+- Add controlled synthetic experiments validating theory
+- Further soften any remaining overclaims
+- Formalize informal arguments (e.g., truncation → formal proposition)
+- Strengthen limitations section
+
+### Step 7: Recompile Round 2
+
+```bash
+cd paper && latexmk -C && latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
+cp main.pdf main_round2.pdf
+```
+
+### Step 8: Document Results
+
+Create `PAPER_IMPROVEMENT_LOG.md` in the paper directory:
+
+```markdown
+# Paper Improvement Log
+
+## Score Progression
+
+| Round | Score | Verdict | Key Changes |
+|-------|-------|---------|-------------|
+| Round 0 (original) | X/10 | No/Almost/Yes | Baseline |
+| Round 1 | Y/10 | No/Almost/Yes | [summary of fixes] |
+| Round 2 | Z/10 | No/Almost/Yes | [summary of fixes] |
+
+## Round 1 Review & Fixes
+
+<details>
+<summary>GPT-5.4 xhigh Review (Round 1)</summary>
+
+[Full raw review text, verbatim]
+
+</details>
+
+### Fixes Implemented
+1. [Fix description]
+2. [Fix description]
+...
+
+## Round 2 Review & Fixes
+
+<details>
+<summary>GPT-5.4 xhigh Review (Round 2)</summary>
+
+[Full raw review text, verbatim]
+
+</details>
+
+### Fixes Implemented
+1. [Fix description]
+2. [Fix description]
+...
+
+## PDFs
+- `main_round0_original.pdf` — Original generated paper
+- `main_round1.pdf` — After Round 1 fixes
+- `main_round2.pdf` — Final version after Round 2 fixes
+```
+
+### Step 9: Summary
+
+Report to user:
+- Score progression table
+- Number of CRITICAL/MAJOR/MINOR issues fixed per round
+- Final page count
+- Remaining issues (if any)
+
+## Output
+
+```
+paper/
+├── main_round0_original.pdf    # Original
+├── main_round1.pdf             # After Round 1
+├── main_round2.pdf             # After Round 2 (final)
+├── main.pdf                    # = main_round2.pdf
+└── PAPER_IMPROVEMENT_LOG.md    # Full review log with scores
+```
+
+## Key Rules
+
+- **Preserve all PDF versions** — user needs to compare progression
+- **Save FULL raw review text** — do not summarize or truncate GPT-5.4 responses
+- **Use `mcp__codex__codex-reply`** for Round 2 to maintain conversation context
+- **Always recompile after fixes** — verify 0 errors before proceeding
+- **Do not fabricate experimental results** — synthetic validation must describe methodology, not invent numbers
+- **Respect the paper's claims** — soften overclaims rather than adding unsupported new claims
+- **Global consistency** — when renaming notation or softening claims, check ALL files (abstract, intro, method, experiments, theory sections, conclusion, tables, figure captions)
+
+## Typical Score Progression
+
+Based on end-to-end testing on a theory paper (MoLR-MoG, ICLR 2026):
+
+| Round | Score | Key Improvements |
+|-------|-------|-----------------|
+| Round 0 | 4/10 | Baseline: assumption-model mismatch, overclaims, notation issues |
+| Round 1 | 6/10 | Fixed assumptions, softened claims, added interpretation, renamed notation |
+| Round 2 | ~7/10 | Added synthetic validation, formal truncation proposition, stronger limitations |
+
+**+3 points in 2 rounds** is typical for a well-structured but rough first draft.
