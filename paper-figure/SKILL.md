@@ -9,6 +9,19 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex,
 
 Generate all figures and tables for a paper based on: **$ARGUMENTS**
 
+## Scope: What This Skill Can and Cannot Do
+
+| Category | Can auto-generate? | Examples |
+|----------|-------------------|----------|
+| **Data-driven plots** | ✅ Yes | Line plots (training curves), bar charts (method comparison), scatter plots, heatmaps, box/violin plots |
+| **Comparison tables** | ✅ Yes | LaTeX tables comparing prior bounds, method features, ablation results |
+| **Multi-panel figures** | ✅ Yes | Subfigure grids combining multiple plots (e.g., 3×3 dataset × method) |
+| **Architecture/pipeline diagrams** | ❌ No — manual | Model architecture, data flow diagrams, system overviews. At best can generate a rough TikZ skeleton, but **expect to draw these yourself** using tools like draw.io, Figma, or TikZ |
+| **Generated image grids** | ❌ No — manual | Grids of generated samples (e.g., GAN/diffusion outputs). These come from running your model, not from this skill |
+| **Photographs / screenshots** | ❌ No — manual | Real-world images, UI screenshots, qualitative examples |
+
+**In practice:** For a typical ML paper, this skill handles ~60% of figures (all data plots + tables). The remaining ~40% (hero figure, architecture diagram, qualitative results) need to be created manually and placed in `figures/` before running `/paper-write`. The skill will detect these as "existing figures" and preserve them.
+
 ## Constants
 
 - **STYLE = `publication`** — Visual style preset. Options: `publication` (default, clean for print), `poster` (larger fonts), `slide` (bold colors)
@@ -151,10 +164,11 @@ Method & Rate & Depends on $D$? & Multi-modal? \\
 \end{table}
 ```
 
-**Architecture diagrams** (TikZ or description):
-- Generate a TikZ skeleton if possible
-- Otherwise, generate a clear text description for manual creation
-- Flag as "manual refinement recommended"
+**Architecture/pipeline diagrams** (MANUAL — outside this skill's scope):
+- These require manual creation using draw.io, Figma, Keynote, or TikZ
+- This skill can generate a rough TikZ skeleton as a starting point, but **do not expect publication-quality results**
+- If the figure already exists in `figures/`, preserve it and generate only the LaTeX `\includegraphics` snippet
+- Flag as `[MANUAL]` in the figure plan and `latex_includes.tex`
 
 ### Step 5: Run All Scripts
 
