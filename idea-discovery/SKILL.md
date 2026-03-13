@@ -47,7 +47,7 @@ Invoke `/research-lit` to map the research landscape:
 - Identify structural gaps and recurring limitations
 - Output a literature summary (saved to working notes)
 
-**🚦 Checkpoint** (+ Feishu if configured — interactive mode sends checkpoint to Feishu, waits for reply; push mode sends summary; off/absent skips)**:** Present the landscape summary to the user. Ask:
+**🚦 Checkpoint:** Present the landscape summary to the user. Ask:
 
 ```
 📚 Literature survey complete. Here's what I found:
@@ -76,7 +76,7 @@ Invoke `/idea-creator` with the landscape context:
 - Rank by empirical signal
 - Output `IDEA_REPORT.md`
 
-**🚦 Checkpoint** (+ Feishu if configured)**:** Present `IDEA_REPORT.md` ranked ideas to the user. Ask:
+**🚦 Checkpoint:** Present `IDEA_REPORT.md` ranked ideas to the user. Ask:
 
 ```
 💡 Generated X ideas, filtered to Y, piloted Z. Top results:
