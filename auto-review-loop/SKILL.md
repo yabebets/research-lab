@@ -43,14 +43,15 @@ Long-running loops may hit the context window limit, triggering automatic compac
 ### Initialization
 
 1. **Check for `REVIEW_STATE.json`** in project root:
-   - If it exists AND `status` is `"in_progress"`:
+   - If it does not exist: **fresh start** (normal case, identical to behavior before this feature existed)
+   - If it exists AND `status` is `"completed"`: **fresh start** (previous loop finished normally)
+   - If it exists AND `status` is `"in_progress"` AND `timestamp` is older than 24 hours: **fresh start** (stale state from a killed/abandoned run — delete the file and start over)
+   - If it exists AND `status` is `"in_progress"` AND `timestamp` is within 24 hours: **resume**
      - Read the state file to recover `round`, `threadId`, `last_score`, `pending_experiments`
      - Read `AUTO_REVIEW.md` to restore full context of prior rounds
      - If `pending_experiments` is non-empty, check if they have completed (e.g., check screen sessions)
      - Resume from the next round (round = saved round + 1)
      - Log: "Recovered from context compaction. Resuming at Round N."
-   - If it exists AND `status` is `"completed"`: treat as fresh start (previous loop finished)
-   - If it does not exist: fresh start (normal case)
 2. Read project narrative documents, memory files, and any prior review documents
 3. Read recent experiment results (check output directories, logs)
 4. Identify current weaknesses and open TODOs from prior reviews

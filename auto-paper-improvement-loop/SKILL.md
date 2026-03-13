@@ -40,7 +40,7 @@ If the context window fills up mid-loop, Claude Code auto-compacts. To recover, 
 }
 ```
 
-**On startup**: if `PAPER_IMPROVEMENT_STATE.json` exists with `"status": "in_progress"`, read it + `PAPER_IMPROVEMENT_LOG.md` to recover context, then resume from the next round. If `"status": "completed"` or file absent, start fresh.
+**On startup**: if `PAPER_IMPROVEMENT_STATE.json` exists with `"status": "in_progress"` AND `timestamp` is within 24 hours, read it + `PAPER_IMPROVEMENT_LOG.md` to recover context, then resume from the next round. Otherwise (file absent, `"status": "completed"`, or older than 24 hours), start fresh.
 
 **After each round**: overwrite the state file. **On completion**: set `"status": "completed"`.
 
