@@ -218,7 +218,7 @@ Write a structured report to `IDEA_REPORT.md` in the project root:
 - Always estimate compute cost. An idea that needs 1000 GPU-hours is not actionable for most researchers.
 - "Apply X to Y" is the lowest form of research idea. Push for deeper questions.
 - Include eliminated ideas in the report — they save future time by documenting dead ends.
-- If the user's direction is too broad, ask them to narrow it before proceeding.
+- **If the user's direction is too broad (e.g., "NLP", "computer vision", "reinforcement learning"), STOP and ask them to narrow it.** A good direction is 1-2 sentences specifying the problem, domain, and constraint — e.g., "factorized gap in discrete diffusion LMs" or "sample efficiency of offline RL with image observations". Without sufficient specificity, generated ideas will be too vague to run experiments on.
 
 ## Composing with Other Skills
 
