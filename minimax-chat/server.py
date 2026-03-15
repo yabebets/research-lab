@@ -23,7 +23,7 @@ def debug_log(msg):
     except:
         pass
 
-debug_log("=== MCP Server Starting (v2.0) ===")
+debug_log("=== MCP Server Starting (v2.1) ===")
 debug_log(f"MINIMAX_API_KEY set: {bool(os.environ.get('MINIMAX_API_KEY'))}")
 debug_log(f"MINIMAX_BASE_URL: {os.environ.get('MINIMAX_BASE_URL', 'not set')}")
 debug_log(f"MINIMAX_MODEL: {os.environ.get('MINIMAX_MODEL', 'not set')}")
