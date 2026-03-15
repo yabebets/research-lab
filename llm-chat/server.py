@@ -12,10 +12,6 @@ Supported Providers (examples):
     DeepSeek:    LLM_BASE_URL=https://api.deepseek.com/v1 LLM_MODEL=deepseek-chat
     Kimi:        LLM_BASE_URL=https://api.moonshot.cn/v1 LLM_MODEL=moonshot-v1-32k
     MiniMax:     LLM_BASE_URL=https://api.minimax.chat/v1 LLM_MODEL=MiniMax-M2.5
-    ZhiPu:       LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4 LLM_MODEL=glm-4-plus
-    SiliconFlow: LLM_BASE_URL=https://api.siliconflow.cn/v1 LLM_MODEL=Qwen/Qwen2.5-72B-Instruct
-    阿里百炼:     LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 LLM_MODEL=qwen-max
-    零一万物:     LLM_BASE_URL=https://api.lingyiwanwu.com/v1 LLM_MODEL=yi-large
 """
 
 import json
