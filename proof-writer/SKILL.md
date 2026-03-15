@@ -11,7 +11,7 @@ Write a mathematically honest proof package, not a polished fake proof.
 
 ## Constants
 
-- PROOF_DOC = `PROOF_PACKAGE.md` in project root
+- DEFAULT_PROOF_DOC = `PROOF_PACKAGE.md` in project root
 - STATUS = `PROVABLE AS STATED | PROVABLE AFTER WEAKENING / EXTRA ASSUMPTION | NOT CURRENTLY JUSTIFIED`
 
 ## Context: $ARGUMENTS
@@ -38,8 +38,13 @@ If notation or assumptions are ambiguous, state the exact interpretation you are
 ## Workflow
 
 ### Step 1: Gather Proof Context
-Read the local proof package if it exists:
-- `PROOF_PACKAGE.md`
+Determine the target proof file with this priority:
+1. a file path explicitly specified by the user
+2. a proof draft already referenced in local notes or theorem files
+3. `PROOF_PACKAGE.md` in project root as the default target
+
+Read the relevant local context:
+- the chosen target proof file, if it already exists
 - theorem notes, appendix drafts, or files explicitly mentioned by the user
 
 Extract:
@@ -94,13 +99,15 @@ Then write a dependency map:
 
 If one step is substantial, isolate it as a lemma instead of burying it in one sentence.
 
-### Step 5: Write `PROOF_DOC`
-Write `PROOF_PACKAGE.md` in project root.
+### Step 5: Write the Proof Document
+Write to the chosen target proof file.
 
-If `PROOF_PACKAGE.md` already exists:
+If the target proof file already exists:
 - read it first
 - update the relevant claim section
 - do not blindly duplicate prior content
+
+If the user does not specify a target, default to `PROOF_PACKAGE.md` in project root.
 
 Do NOT write directly into paper sections or appendix `.tex` files unless the user explicitly asks for that target.
 
@@ -123,7 +130,7 @@ Mathematical rigor requirements:
 - never write math in plain text
 
 ### Step 6: Final Verification
-Before finishing `PROOF_DOC`, verify:
+Before finishing the target proof file, verify:
 - the theorem statement exactly matches what was actually shown
 - every assumption used is stated
 - every nontrivial implication is justified
@@ -136,7 +143,7 @@ If a key step still cannot be justified, downgrade the status and write a blocka
 
 ## Required File Structure
 
-Write `PROOF_DOC` using this structure:
+Write the target proof file using this structure:
 
 ```md
 # Proof Package
@@ -195,7 +202,7 @@ Write:
 
 ## Chat Response
 
-After writing `PROOF_DOC`, respond briefly with:
+After writing the target proof file, respond briefly with:
 - status
 - whether the original claim survived unchanged
 - what file was updated
