@@ -66,6 +66,9 @@ Identify:
 - scope ambiguities
 - whether the available sketch proves the full claim or only a weaker variant
 
+Preserve the user's original theorem statement unless a change is explicitly required.
+If you use a stronger normalization or cleaner internal formulation only to make the proof easier, keep that as an internal proof device rather than silently replacing the original claim.
+
 ### Step 3: Feasibility Triage
 Before writing a proof, classify the claim into exactly one status:
 - `PROVABLE AS STATED`
@@ -79,6 +82,7 @@ Check explicitly:
 - is there an obvious counterexample, boundary case, or quantifier failure?
 
 If the claim is not provable as stated, do NOT fabricate a proof.
+Do NOT silently strengthen assumptions or narrow the theorem's scope just to make the proof work.
 
 ### Step 4: Build a Dependency Map
 Choose a proof strategy, for example:
@@ -128,6 +132,7 @@ Mathematical rigor requirements:
 - if invoking a standard fact, state its name and why its assumptions are satisfied here
 - use `$...$` for inline math and `$$...$$` for display equations
 - never write math in plain text
+- if the proof uses an equivalent normalization that is stronger in appearance than the user's original theorem statement, label it explicitly as a proof device and keep the original claim separate
 
 ### Step 6: Final Verification
 Before finishing the target proof file, verify:
@@ -212,6 +217,7 @@ After writing the target proof file, respond briefly with:
 - Never fabricate a missing proof step.
 - Prefer weakening the claim over overclaiming.
 - Separate assumptions, derived facts, heuristics, and conjectures.
+- Preserve the user's original theorem statement unless you explicitly mark a corrected claim or an internal normalization.
 - If the statement is false as written, say so explicitly and give a counterexample or repaired statement.
 - If uncertainty remains, mark it explicitly in `Open Risks`; do not hide it inside polished prose.
 - Correctness matters more than brevity.
