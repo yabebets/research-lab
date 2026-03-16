@@ -126,9 +126,9 @@ For the surviving top idea(s), get brutal feedback:
 
 **Update `IDEA_REPORT.md`** with reviewer feedback and revised plan.
 
-### Phase 4.5: Method Refinement + Experiment Planning (Optional)
+### Phase 4.5: Method Refinement + Experiment Planning
 
-If the top idea has a positive pilot, confirmed novelty, and reviewer score ≥ 6, refine the method and plan experiments:
+After review, refine the top idea into a concrete proposal and plan experiments:
 
 ```
 /research-refine-pipeline "[top idea description + pilot results + reviewer feedback]"
@@ -155,7 +155,7 @@ Proceed to implementation? Or adjust the proposal?
 
 - **User approves** (or AUTO_PROCEED=true) → proceed to Final Report.
 - **User requests changes** → pass feedback to `/research-refine` for another round.
-- **Skip condition:** If reviewer score < 6 or pilot was weak, skip this phase and note in the report that the idea needs more validation before method refinement.
+- **Lite mode:** If reviewer score < 6 or pilot was weak, run `/research-refine` only (skip `/experiment-plan`) and note remaining risks in the report.
 
 ### Phase 5: Final Report
 
@@ -189,7 +189,7 @@ Finalize `IDEA_REPORT.md` with all accumulated information:
 ## Eliminated Ideas
 [ideas killed at each phase, with reasons]
 
-## Refined Proposal (if Phase 4.5 ran)
+## Refined Proposal
 - Proposal: `refine-logs/FINAL_PROPOSAL.md`
 - Experiment plan: `refine-logs/EXPERIMENT_PLAN.md`
 - Tracker: `refine-logs/EXPERIMENT_TRACKER.md`
