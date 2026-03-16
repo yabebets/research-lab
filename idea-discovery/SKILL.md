@@ -11,14 +11,14 @@ Orchestrate a complete idea discovery workflow for: **$ARGUMENTS**
 
 ## Overview
 
-This skill chains four sub-skills into a single automated pipeline:
+This skill chains sub-skills into a single automated pipeline:
 
 ```
-/research-lit → /idea-creator → /novelty-check → /research-review
-  (survey)      (brainstorm)    (verify novel)    (critical feedback)
+/research-lit → /idea-creator → /novelty-check → /research-review → /research-refine-pipeline
+  (survey)      (brainstorm)    (verify novel)    (critical feedback)  (refine method + plan experiments)
 ```
 
-Each phase builds on the previous one's output. The final deliverable is a validated `IDEA_REPORT.md` with ranked ideas, pilot results, and a suggested execution plan.
+Each phase builds on the previous one's output. The final deliverables are a validated `IDEA_REPORT.md` with ranked ideas, plus a refined proposal (`refine-logs/FINAL_PROPOSAL.md`) and experiment plan (`refine-logs/EXPERIMENT_PLAN.md`) for the top idea.
 
 ## Constants
 
@@ -126,6 +126,37 @@ For the surviving top idea(s), get brutal feedback:
 
 **Update `IDEA_REPORT.md`** with reviewer feedback and revised plan.
 
+### Phase 4.5: Method Refinement + Experiment Planning (Optional)
+
+If the top idea has a positive pilot, confirmed novelty, and reviewer score ≥ 6, refine the method and plan experiments:
+
+```
+/research-refine-pipeline "[top idea description + pilot results + reviewer feedback]"
+```
+
+**What this does:**
+- Freeze a **Problem Anchor** to prevent scope drift
+- Iteratively refine the method via GPT-5.4 review (up to 5 rounds, until score ≥ 9)
+- Generate a claim-driven experiment roadmap with ablations, budgets, and run order
+- Output: `refine-logs/FINAL_PROPOSAL.md`, `refine-logs/EXPERIMENT_PLAN.md`, `refine-logs/EXPERIMENT_TRACKER.md`
+
+**🚦 Checkpoint:** Present the refined proposal summary:
+
+```
+🔬 Method refined and experiment plan ready:
+- Problem anchor: [anchored problem]
+- Method thesis: [one sentence]
+- Dominant contribution: [what's new]
+- Must-run experiments: [N blocks]
+- First 3 runs to launch: [list]
+
+Proceed to implementation? Or adjust the proposal?
+```
+
+- **User approves** (or AUTO_PROCEED=true) → proceed to Final Report.
+- **User requests changes** → pass feedback to `/research-refine` for another round.
+- **Skip condition:** If reviewer score < 6 or pilot was weak, skip this phase and note in the report that the idea needs more validation before method refinement.
+
 ### Phase 5: Final Report
 
 Finalize `IDEA_REPORT.md` with all accumulated information:
@@ -135,7 +166,7 @@ Finalize `IDEA_REPORT.md` with all accumulated information:
 
 **Direction**: $ARGUMENTS
 **Date**: [today]
-**Pipeline**: research-lit → idea-creator → novelty-check → research-review
+**Pipeline**: research-lit → idea-creator → novelty-check → research-review → research-refine-pipeline
 
 ## Executive Summary
 [2-3 sentences: best idea, key evidence, recommended next step]
@@ -158,9 +189,13 @@ Finalize `IDEA_REPORT.md` with all accumulated information:
 ## Eliminated Ideas
 [ideas killed at each phase, with reasons]
 
+## Refined Proposal (if Phase 4.5 ran)
+- Proposal: `refine-logs/FINAL_PROPOSAL.md`
+- Experiment plan: `refine-logs/EXPERIMENT_PLAN.md`
+- Tracker: `refine-logs/EXPERIMENT_TRACKER.md`
+
 ## Next Steps
-- [ ] Implement Idea 1
-- [ ] /run-experiment to deploy full-scale experiments
+- [ ] /run-experiment to deploy experiments from the plan
 - [ ] /auto-review-loop to iterate until submission-ready
 - [ ] Or invoke /research-pipeline for the complete end-to-end flow
 ```
@@ -180,9 +215,8 @@ Finalize `IDEA_REPORT.md` with all accumulated information:
 After this pipeline produces a validated top idea:
 
 ```
-/idea-discovery "direction"         ← you are here (Workflow 1)
-implement                           ← write code for the top idea
-/run-experiment                     ← deploy full-scale experiments
+/idea-discovery "direction"         ← you are here (Workflow 1, includes method refinement + experiment planning)
+/run-experiment                     ← deploy experiments from the plan
 /auto-review-loop "top idea"        ← Workflow 2: iterate until submission-ready
 
 Or use /research-pipeline for the full end-to-end flow.
