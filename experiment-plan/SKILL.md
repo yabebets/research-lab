@@ -220,6 +220,8 @@ Tracker file: refine-logs/EXPERIMENT_TRACKER.md
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
+
 - **Every experiment must defend a claim.** If it does not change a reviewer belief, cut it.
 - **Prefer a compact paper story.** Design the main table first, then add only the ablations that defend it.
 - **Defend simplicity explicitly.** If complexity is a concern, include a deletion study or a stronger-but-bloated variant comparison.

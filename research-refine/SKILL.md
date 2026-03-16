@@ -623,6 +623,8 @@ Suggested next step: /experiment-plan
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
+
 - **Anchor first, every round.** Always carry forward the same Problem Anchor.
 - **One paper, one dominant contribution.** Avoid multiple parallel contributions unless the paper truly needs them.
 - **The smallest adequate mechanism wins.** Bigger is not automatically better.

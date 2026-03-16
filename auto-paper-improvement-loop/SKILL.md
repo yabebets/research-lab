@@ -298,6 +298,8 @@ paper/
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
+
 - **Preserve all PDF versions** — user needs to compare progression
 - **Save FULL raw review text** — do not summarize or truncate GPT-5.4 responses
 - **Use `mcp__codex__codex-reply`** for Round 2 to maintain conversation context

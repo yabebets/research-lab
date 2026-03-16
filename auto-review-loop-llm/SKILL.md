@@ -203,6 +203,8 @@ Append to `AUTO_REVIEW.md`:
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
+
 - Be honest about weaknesses
 - Implement fixes BEFORE re-reviewing
 - Document everything

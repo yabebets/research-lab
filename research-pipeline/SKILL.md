@@ -153,6 +153,8 @@ After the auto-review loop completes, write a final status report:
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
+
 - **Human checkpoint after Stage 1 is controlled by AUTO_PROCEED.** When `false`, do not proceed without user confirmation. When `true`, auto-select the top idea after presenting results.
 - **Stages 2-4 can run autonomously** once the user confirms the idea. This is the "sleep and wake up to results" part.
 - **If Stage 4 ends at round 4 without positive assessment**, stop and report remaining issues. Do not loop forever.

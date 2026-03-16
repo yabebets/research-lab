@@ -211,6 +211,8 @@ Write a structured report to `IDEA_REPORT.md` in the project root:
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
+
 - The user provides a DIRECTION, not an idea. Your job is to generate the ideas.
 - Quantity first, quality second: brainstorm broadly, then filter ruthlessly.
 - A good negative result is just as publishable as a positive one. Prioritize ideas where the answer matters regardless of direction.

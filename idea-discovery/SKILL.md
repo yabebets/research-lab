@@ -202,6 +202,8 @@ Finalize `IDEA_REPORT.md` with all accumulated information:
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
+
 - **Don't skip phases.** Each phase filters and validates — skipping leads to wasted effort later.
 - **Checkpoint between phases.** Briefly summarize what was found before moving on.
 - **Kill ideas early.** It's better to kill 10 bad ideas in Phase 3 than to implement one and fail.

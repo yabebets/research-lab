@@ -211,6 +211,8 @@ When loop ends (positive assessment or max rounds):
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
+
 - ALWAYS use `config: {"model_reasoning_effort": "xhigh"}` for maximum reasoning depth
 - Save threadId from first call, use `mcp__codex__codex-reply` for subsequent rounds
 - Be honest — include negative results and failed experiments
