@@ -27,14 +27,14 @@ Generate publication-quality illustrations using a **multi-stage workflow** with
 │          ▼                                                               │
 │   ┌─────────────┐                                                        │
 │   │   Gemini    │ ◄─── Step 2: Optimize layout description               │
-│   │ (gemini-2.5)│      - Refine component positioning                    │
+│   │ (gemini-3-pro)│      - Refine component positioning                    │
 │   │  Layout     │      - Optimize spacing and grouping                   │
 │   └──────┬──────┘                                                        │
 │          │                                                               │
 │          ▼                                                               │
 │   ┌─────────────┐                                                        │
 │   │   Gemini    │ ◄─── Step 3: CVPR/NeurIPS style verification          │
-│   │ (gemini-2.5)│      - Check color palette compliance                  │
+│   │ (gemini-3-pro)│      - Check color palette compliance                  │
 │   │  Style      │      - Verify arrow and font standards                 │
 │   └──────┬──────┘                                                        │
 │          │                                                               │
@@ -66,7 +66,7 @@ Generate publication-quality illustrations using a **multi-stage workflow** with
 ## Constants
 
 - **IMAGE_MODEL = `gemini-3-pro-image-preview`** — Paperbanana (Nano Banana Pro) for image rendering
-- **REASONING_MODEL = `gemini-2.5-pro`** — Gemini for layout optimization and style checking
+- **REASONING_MODEL = `gemini-3-pro-preview`** — Gemini for layout optimization and style checking
 - **MAX_ITERATIONS = 5** — Maximum refinement rounds
 - **TARGET_SCORE = 9** — Minimum acceptable score (1-10) — RAISED FOR QUALITY
 - **OUTPUT_DIR = `figures/ai_generated/`** — Output directory
@@ -265,13 +265,13 @@ VERIFY: Each arrow must point to the CORRECT target!
 [Any specific requirements from user]
 ```
 
-### Step 2: Gemini Layout Optimization (gemini-2.5)
+### Step 2: Gemini Layout Optimization (gemini-3-pro)
 
-**Claude sends the initial prompt to Gemini (gemini-2.5) for layout optimization.**
+**Claude sends the initial prompt to Gemini (gemini-3-pro) for layout optimization.**
 
 ```bash
 #!/bin/bash
-# Step 2: Optimize layout using Gemini gemini-2.5
+# Step 2: Optimize layout using Gemini gemini-3-pro
 # This step refines component positioning and spacing
 
 set -e
@@ -280,7 +280,7 @@ OUTPUT_DIR="figures/ai_generated"
 mkdir -p "$OUTPUT_DIR"
 
 API_KEY="${GEMINI_API_KEY}"
-URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=$API_KEY"
+URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=$API_KEY"
 
 # The initial prompt from Claude
 INITIAL_PROMPT='[Claude fills in the detailed prompt here]'
@@ -312,7 +312,7 @@ with open("/tmp/gemini_layout_request.json", "w") as f:
 print("Layout request created")
 PYTHON
 
-# Call Gemini gemini-2.5-pro for layout optimization (DIRECT connection, no proxy)
+# Call Gemini gemini-3-pro-preview for layout optimization (DIRECT connection, no proxy)
 RESPONSE=$(curl -s --max-time 90 \
   -X POST "$URL" \
   -H 'Content-Type: application/json' \
@@ -333,16 +333,16 @@ echo "$LAYOUT_DESCRIPTION"
 echo "$LAYOUT_DESCRIPTION" > "$OUTPUT_DIR/layout_description.txt"
 ```
 
-### Step 3: Gemini Style Verification (gemini-2.5)
+### Step 3: Gemini Style Verification (gemini-3-pro)
 
 **Claude sends the optimized layout to Gemini for CVPR/NeurIPS style verification.**
 
 ```bash
 #!/bin/bash
-# Step 3: Verify and enhance style compliance using Gemini gemini-2.5
+# Step 3: Verify and enhance style compliance using Gemini gemini-3-pro
 
 API_KEY="${GEMINI_API_KEY}"
-URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=$API_KEY"
+URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=$API_KEY"
 
 # Read layout from previous step
 LAYOUT=$(cat figures/ai_generated/layout_description.txt)
@@ -375,7 +375,7 @@ with open("/tmp/gemini_style_request.json", "w") as f:
 print("Style request created")
 PYTHON
 
-# Call Gemini gemini-2.5-pro for style verification (DIRECT connection, no proxy)
+# Call Gemini gemini-3-pro-preview for style verification (DIRECT connection, no proxy)
 RESPONSE=$(curl -s --max-time 90 \
   -X POST "$URL" \
   -H 'Content-Type: application/json' \
@@ -665,7 +665,7 @@ When figure is accepted (score ≥ 9):
 9. **VISUAL APPEAL MATTERS** — Plain boring figures = score ≤ 8
 10. **Target score is 9** — Not 8, not "good enough"
 11. **USE MULTI-STAGE WORKFLOW** — Claude → Gemini Layout → Gemini Style → Paperbanana → Claude Review
-12. **USE CORRECT MODELS** — gemini-2.5 for reasoning, gemini-3-pro-image-preview for rendering
+12. **USE CORRECT MODELS** — gemini-3-pro for reasoning, gemini-3-pro-image-preview for rendering
 
 ## Output Structure
 
@@ -686,7 +686,7 @@ figures/ai_generated/
 | Stage | Model | Purpose |
 |-------|-------|---------|
 | Step 1 | Claude | Parse request, create initial prompt |
-| Step 2 | gemini-2.5 | Layout optimization (positioning, spacing, grouping) |
-| Step 3 | gemini-2.5 | CVPR/NeurIPS style verification |
+| Step 2 | gemini-3-pro | Layout optimization (positioning, spacing, grouping) |
+| Step 3 | gemini-3-pro | CVPR/NeurIPS style verification |
 | Step 4 | gemini-3-pro-image-preview (Paperbanana) | High-quality image rendering |
 | Step 5 | Claude | STRICT visual review and scoring |
