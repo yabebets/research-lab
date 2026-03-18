@@ -11,12 +11,12 @@ Deploy and run ML experiment: $ARGUMENTS
 
 ### Step 1: Detect Environment
 
-Read the project's `CLAUDE.md` to determine the experiment environment:
+Read the project's `AGENTS.md` to determine the experiment environment:
 
 - **Local GPU**: Look for local CUDA/MPS setup info
 - **Remote server**: Look for SSH alias, conda env, code directory
 
-If no server info is found in `CLAUDE.md`, ask the user.
+If no server info is found in `AGENTS.md`, ask the user.
 
 ### Step 2: Pre-flight Check
 
@@ -38,7 +38,7 @@ Free GPU = memory.used < 500 MiB.
 
 ### Step 3: Sync Code (Remote Only)
 
-Check the project's `CLAUDE.md` for a `code_sync` setting. If not specified, default to `rsync`.
+Check the project's `AGENTS.md` for a `code_sync` setting. If not specified, default to `rsync`.
 
 #### Option A: rsync (default)
 
@@ -47,7 +47,7 @@ Only sync necessary files — NOT data, checkpoints, or large files:
 rsync -avz --include='*.py' --exclude='*' <local_src>/ <server>:<remote_dst>/
 ```
 
-#### Option B: git (when `code_sync: git` is set in CLAUDE.md)
+#### Option B: git (when `code_sync: git` is set in AGENTS.md)
 
 Push local changes to remote repo, then pull on the server:
 ```bash
@@ -59,6 +59,46 @@ ssh <server> "cd <remote_dst> && git pull"
 ```
 
 Benefits: version-tracked, multi-server sync with one push, no rsync include/exclude rules needed.
+
+### Step 3.5: W&B Integration (when `wandb: true` in AGENTS.md)
+
+**Skip this step entirely if `wandb` is not set or is `false` in AGENTS.md.**
+
+Before deploying, ensure the experiment scripts have W&B logging:
+
+1. **Check if wandb is already in the script** — look for `import wandb` or `wandb.init`. If present, skip to Step 4.
+
+2. **If not present, add W&B logging** to the training script:
+   ```python
+   import wandb
+   wandb.init(project=WANDB_PROJECT, name=EXP_NAME, config={...hyperparams...})
+
+   # Inside training loop:
+   wandb.log({"train/loss": loss, "train/lr": lr, "step": step})
+
+   # After eval:
+   wandb.log({"eval/loss": eval_loss, "eval/ppl": ppl, "eval/accuracy": acc})
+
+   # At end:
+   wandb.finish()
+   ```
+
+3. **Metrics to log** (add whichever apply to the experiment):
+   - `train/loss` — training loss per step
+   - `train/lr` — learning rate
+   - `eval/loss`, `eval/ppl`, `eval/accuracy` — eval metrics per epoch
+   - `gpu/memory_used` — GPU memory (via `torch.cuda.max_memory_allocated()`)
+   - `speed/samples_per_sec` — throughput
+   - Any custom metrics the experiment already computes
+
+4. **Verify wandb login on the target machine:**
+   ```bash
+   ssh <server> "wandb status"  # should show logged in
+   # If not logged in:
+   ssh <server> "wandb login <WANDB_API_KEY>"
+   ```
+
+> The W&B project name and API key come from `AGENTS.md` (see example below). The experiment name is auto-generated from the script name + timestamp.
 
 ### Step 4: Deploy
 
@@ -109,9 +149,9 @@ After deployment is verified, check `~/.codex/feishu.json`:
 - Report back: which GPU, which screen/process, what command, estimated time
 - If multiple experiments, launch them in parallel on different GPUs
 
-## Project Config Example
+## AGENTS.md Example
 
-Users should add their server info to their project's `CLAUDE.md`:
+Users should add their server info to their project's `AGENTS.md`:
 
 ```markdown
 ## Remote Server
@@ -120,9 +160,13 @@ Users should add their server info to their project's `CLAUDE.md`:
 - Conda: `eval "$(/opt/conda/bin/conda shell.bash hook)" && conda activate research`
 - Code dir: `/home/user/experiments/`
 - code_sync: rsync          # default. Or set to "git" for git push/pull workflow
+- wandb: false              # set to "true" to auto-add W&B logging to experiment scripts
+- wandb_project: my-project # W&B project name (required if wandb: true)
+- wandb_entity: my-team     # W&B team/user (optional, uses default if omitted)
 
 ## Local Environment
 - Mac MPS / Linux CUDA
 - Conda env: `ml` (Python 3.10 + PyTorch)
 ```
 
+> **W&B setup**: Run `wandb login` on your server once (or set `WANDB_API_KEY` env var). The skill reads project/entity from `AGENTS.md` and adds `wandb.init()` + `wandb.log()` to your training scripts automatically. Dashboard: `https://wandb.ai/<entity>/<project>`.

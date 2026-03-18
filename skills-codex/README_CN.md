@@ -1,22 +1,22 @@
-# skills-pr 说明
+# skills-codex 说明
 
 ## 1. 这个包是什么
 
-这是一个面向 **Codex** 的技能包目录，已经按你当前确认的范围整理好：
+这是一个面向 **Codex** 的技能包目录，当前版本已经与主线 `skills/` 对齐：
 
-- 保留与 `.claude/skills` **同名** 的全部技能
-- 额外加入一个强化后的通信领域检索技能：`comm-lit-review`
+- 保留与 `.claude/skills` **同名** 的完整技能集
+- 同步包含主线新增的 `experiment-bridge`、`grant-proposal`、`paper-illustration`
 
 数量对比：
 
-- `.claude/skills` 原始技能数：`27`
-- 本包技能数：`28`
-- 相比 `.claude` 仅新增：`comm-lit-review`
+- `.claude/skills` 当前技能数：`31`
+- 本包技能数：`31`
+- 与 `.claude/skills`：一一对应，无额外私有技能
 
 本包路径结构是：
 
 ```text
-skills-pr/
+skills/skills-codex/
   <skill-name>/
     SKILL.md
     ...
@@ -28,8 +28,8 @@ skills-pr/
 
 本包没有把当前 `~/.codex/skills` 里的所有内容都打进去，而是只保留：
 
-- `.claude` 中已有的同名技能
-- 新增强化技能 `comm-lit-review`
+- 主线 `skills/` 中已有的同名技能
+- 这些技能所需的最小资源目录
 
 因此，本包 **不包含**：
 
@@ -60,9 +60,9 @@ skills-pr/
 
 这意味着它比原始 `.claude` 版本更完整，更接近“可直接用于生成论文模板”的状态。
 
-### 2.4 新增 `comm-lit-review`
+### 2.4 `comm-lit-review`
 
-这是这次额外强化的技能，定位是：
+这是保留在主线同步集里的领域强化技能，定位是：
 
 - 通信 / 无线 / NTN / 卫星 / Wi-Fi / 传输控制 / 资源分配等方向的文献检索
 - 默认按通信领域口径做信息检索，而不是走通用文献检索逻辑
@@ -142,14 +142,14 @@ skills-pr/
 
 ```bash
 mkdir -p ~/.codex/skills
-cp -a skills-pr/* ~/.codex/skills/
+cp -a skills/skills-codex/* ~/.codex/skills/
 ```
 
-如果你当前就在 `skills-pr` 的上级目录，也可以用绝对路径：
+如果你当前就在仓库根目录，也可以用绝对路径：
 
 ```bash
 mkdir -p ~/.codex/skills
-cp -a /path/to/skills-pr/* ~/.codex/skills/
+cp -a /path/to/Auto-claude-code-research-in-sleep/skills/skills-codex/* ~/.codex/skills/
 ```
 
 ### 4.2 安装后建议
@@ -216,7 +216,7 @@ Skill is valid!
 这个包适合：
 
 - 从 `.claude` 风格技能迁移到 Codex
-- 保留原有技能集合不扩散
-- 只额外加入一个通信领域强化检索技能
+- 保留与主线 `skills/` 一致的技能集合
+- 在 Codex 环境中直接使用与 Claude 侧对齐的工作流
 
 如果后面你还想继续精简或扩展，可以基于这个目录继续做白名单管理。
