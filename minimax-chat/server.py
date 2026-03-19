@@ -4,7 +4,6 @@
 import json
 import os
 import sys
-import tempfile
 import httpx
 
 # Force unbuffered stdout/stdin
@@ -12,7 +11,7 @@ sys.stdout = os.fdopen(sys.stdout.fileno(), 'wb', buffering=0)
 sys.stdin = os.fdopen(sys.stdin.fileno(), 'rb', buffering=0)
 
 # Debug logging
-DEBUG_LOG = os.path.join(tempfile.gettempdir(), "minimax-mcp-debug.log")
+DEBUG_LOG = "/tmp/minimax-mcp-debug.log"
 
 def debug_log(msg):
     """Write debug message to log file"""

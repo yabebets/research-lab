@@ -17,7 +17,6 @@ Supported Providers (examples):
 import json
 import os
 import sys
-import tempfile
 import httpx
 
 # Force unbuffered stdout/stdin
@@ -31,7 +30,7 @@ DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 SERVER_NAME = os.environ.get("LLM_SERVER_NAME", "llm-chat")
 
 # Debug logging
-DEBUG_LOG = os.path.join(tempfile.gettempdir(), f"{SERVER_NAME}-mcp-debug.log")
+DEBUG_LOG = f"/tmp/{SERVER_NAME}-mcp-debug.log"
 
 def debug_log(msg):
     try:
