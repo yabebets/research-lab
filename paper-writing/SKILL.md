@@ -238,6 +238,7 @@ Invoke `/auto-paper-improvement-loop` to polish the paper:
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 - **Don't skip phases.** Each phase builds on the previous one — skipping leads to errors.
 - **Checkpoint between phases** when AUTO_PROCEED=false. Present results and wait for approval.
 - **Manual figures first.** If the paper needs architecture diagrams or qualitative results, the user must provide them before Phase 3.

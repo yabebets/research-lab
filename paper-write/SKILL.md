@@ -336,6 +336,7 @@ Before declaring done:
 
 ## Key Rules
 
+- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 - **Do NOT generate author names, emails, or affiliations** — use anonymous block or placeholder
 - **Write complete sections, not outlines** — the output should be compilable LaTeX
 - **One file per section** — modular structure for easy editing
