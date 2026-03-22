@@ -10,19 +10,26 @@ It is designed to sit on top of the upstream Codex-native package at `skills/ski
 
 ## What this package contains
 
-- Only the review-heavy skill overrides that need a different reviewer backend
+- Only the reviewer-aware skill overrides that need a different reviewer backend
 - No duplicate templates or resource directories
 - No replacement for the base `skills/skills-codex/` installation
 
 Current overrides:
 
+- `idea-creator`
+- `idea-discovery`
+- `idea-discovery-robot`
 - `research-review`
 - `novelty-check`
 - `research-refine`
 - `auto-review-loop`
+- `grant-proposal`
 - `paper-plan`
 - `paper-figure`
+- `paper-poster`
+- `paper-slides`
 - `paper-write`
+- `paper-writing`
 - `auto-paper-improvement-loop`
 
 ## Install
@@ -88,4 +95,4 @@ This avoids the observed Codex-hosted timeout issue when Gemini is invoked synch
   - Official Gemini CLI: <https://github.com/google-gemini/gemini-cli>
   - AI Studio API key entry: <https://aistudio.google.com/apikey>
 
-This package keeps the upstream ARIS skill shape, but swaps the reviewer transport to the local `gemini-review` bridge. We intentionally did not directly depend on a generic Gemini MCP server package because the ARIS review skills rely on the narrow `review*` tool contract and resumable review-thread behavior.
+This package keeps the upstream ARIS skill shape, but swaps the reviewer transport to the local `gemini-review` bridge. It now covers every predefined Codex skill in this repo that previously depended on a secondary Codex reviewer or `mcp__codex__codex` review step. We intentionally did not directly depend on a generic Gemini MCP server package because the ARIS review skills rely on the narrow `review*` tool contract, resumable review-thread behavior, and now optional local-image review for poster PNGs.
