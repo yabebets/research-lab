@@ -16,6 +16,7 @@ Bridge Codex-first ARIS workflows to Gemini, using the direct Gemini API by defa
 
 The synchronous tools return a JSON string containing `threadId` and `response`.
 The asynchronous start tools return a JSON string containing `jobId` and `status`, and `review_status` later returns the final `threadId` and `response`.
+When using the direct API backend, the tools also accept optional `imagePaths` / `image_paths` so Gemini can review local PNG/JPG/WebP files, which is used by the poster visual-review overlay.
 
 ## Install into Codex
 
@@ -61,6 +62,7 @@ is enough for API mode without exporting the variable in every shell.
 - The bridge defaults to the direct Gemini API path. This is the intended reviewer backend for the ARIS skill overlay.
 - `GEMINI_REVIEW_BACKEND=auto` is still supported if you want API-first auto-selection, and `GEMINI_REVIEW_BACKEND=cli` is available as an explicit fallback.
 - The `tools` argument is accepted for compatibility with existing skills, but is ignored. This matches the original pattern where the external reviewer only sees the prompt context prepared by Codex.
+- `imagePaths` / `image_paths` are supported only by the direct Gemini API backend in this bridge. CLI fallback remains text-only.
 - `threadId` is a bridge-local conversation id persisted under `~/.codex/state/gemini-review/threads/` by default and can be passed to `review_reply`.
 - `jobId` is a bridge-local background task id stored under `~/.codex/state/gemini-review/jobs/` by default, so status can be resumed across MCP server restarts.
 - This is intentionally a narrow, repo-local adapter. We did not directly vendor a generic Gemini MCP server, because the ARIS review-heavy skills expect the specific `review` / `review_reply` / `review_start` / `review_reply_start` / `review_status` interface and resumable review-thread semantics.
@@ -79,6 +81,18 @@ Start a long review:
   "name": "review_start",
   "arguments": {
     "prompt": "Review this paper draft..."
+  }
+}
+```
+
+Multimodal example:
+
+```json
+{
+  "name": "review_start",
+  "arguments": {
+    "prompt": "Review this poster PNG for readability and clipping.",
+    "imagePaths": ["poster/poster_v1.png"]
   }
 }
 ```

@@ -11,7 +11,9 @@ repository.
 
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 import os
 import shutil
 import subprocess
@@ -149,6 +151,42 @@ def load_private_env_file(env_file: Path | None = None) -> list[str]:
             os.environ[key] = value
             loaded.append(key)
     return loaded
+
+
+def normalize_image_paths(raw_value: Any) -> tuple[list[str], str | None]:
+    if raw_value is None:
+        return [], None
+    if isinstance(raw_value, str):
+        candidate = raw_value.strip()
+        return ([candidate] if candidate else []), None
+    if not isinstance(raw_value, list):
+        return [], "imagePaths must be a string or an array of strings"
+
+    image_paths: list[str] = []
+    for item in raw_value:
+        if not isinstance(item, str):
+            return [], "imagePaths entries must be strings"
+        candidate = item.strip()
+        if candidate:
+            image_paths.append(candidate)
+    return image_paths, None
+
+
+def build_inline_image_parts(image_paths: list[str]) -> tuple[list[dict[str, Any]], str | None]:
+    parts: list[dict[str, Any]] = []
+    for raw_path in image_paths:
+        path = Path(raw_path).expanduser()
+        if not path.is_file():
+            return [], f"image file not found: {raw_path}"
+        mime_type, _ = mimetypes.guess_type(path.name)
+        if not mime_type or not mime_type.startswith("image/"):
+            return [], f"unsupported image type for Gemini review: {raw_path}"
+        try:
+            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        except OSError as exc:
+            return [], f"failed to read image file {raw_path}: {exc}"
+        parts.append({"inlineData": {"mimeType": mime_type, "data": encoded}})
+    return parts, None
 
 
 def find_gemini_bin() -> str | None:
@@ -353,7 +391,11 @@ def run_gemini_cli_review(
     history: list[dict[str, str]],
     model: str | None,
     system: str | None,
+    image_paths: list[str],
 ) -> tuple[dict[str, Any] | None, str | None]:
+    if image_paths:
+        return None, "Gemini CLI backend in this bridge does not support imagePaths; use backend=api"
+
     bin_path = find_gemini_bin()
     if not bin_path:
         return None, f"Gemini CLI not found: {GEMINI_BIN}"
@@ -408,6 +450,7 @@ def run_gemini_api_review(
     history: list[dict[str, str]],
     model: str | None,
     system: str | None,
+    image_paths: list[str],
 ) -> tuple[dict[str, Any] | None, str | None]:
     api_key = get_api_key()
     if not api_key:
@@ -428,12 +471,12 @@ def run_gemini_api_review(
                 "parts": [{"text": item["text"]}],
             }
         )
-    request_payload["contents"].append(
-        {
-            "role": "user",
-            "parts": [{"text": prompt}],
-        }
-    )
+    user_parts: list[dict[str, Any]] = [{"text": prompt}]
+    inline_parts, image_error = build_inline_image_parts(image_paths)
+    if image_error:
+        return None, image_error
+    user_parts.extend(inline_parts)
+    request_payload["contents"].append({"role": "user", "parts": user_parts})
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{selected_model}:generateContent"
     request = urllib.request.Request(
@@ -498,10 +541,15 @@ def run_gemini_review(
     system: str | None = None,
     tools: str | None = None,
     backend: str | None = None,
+    image_paths: Any = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     del tools
 
     load_private_env_file()
+
+    normalized_image_paths, image_error = normalize_image_paths(image_paths)
+    if image_error:
+        return None, image_error
 
     thread_id = session_id or uuid.uuid4().hex
     history = load_thread_history(thread_id) if session_id else []
@@ -516,6 +564,7 @@ def run_gemini_review(
             history=history,
             model=model,
             system=system,
+            image_paths=normalized_image_paths,
         )
     else:
         payload, error = run_gemini_cli_review(
@@ -523,6 +572,7 @@ def run_gemini_review(
             history=history,
             model=model,
             system=system,
+            image_paths=normalized_image_paths,
         )
     if error:
         return None, error
@@ -549,7 +599,12 @@ def start_async_review(
     system: str | None = None,
     tools: str | None = None,
     backend: str | None = None,
+    image_paths: Any = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
+    normalized_image_paths, image_error = normalize_image_paths(image_paths)
+    if image_error:
+        return None, image_error
+
     job_id = uuid.uuid4().hex
     created_at = utc_now()
     job = {
@@ -569,6 +624,7 @@ def start_async_review(
             "system": system,
             "tools": tools,
             "backend": backend,
+            "imagePaths": normalized_image_paths,
         },
     }
 
@@ -643,6 +699,7 @@ def run_async_job(job_id: str) -> int:
             system=request.get("system"),
             tools=request.get("tools"),
             backend=request.get("backend"),
+            image_paths=request.get("imagePaths"),
         )
     except Exception as exc:
         payload = None
@@ -731,6 +788,16 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
             "model": {"type": "string", "description": "Optional Gemini model override"},
             "backend": {"type": "string", "description": "Optional Gemini backend override: auto, api, or cli"},
             "tools": {"type": "string", "description": "Accepted for compatibility but ignored by Gemini review"},
+            "imagePaths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional local image paths for Gemini API multimodal review",
+            },
+            "image_paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Alias of imagePaths",
+            },
         }
         reply_properties = {
             "threadId": {"type": "string", "description": "Gemini thread id from a previous review call"},
@@ -806,6 +873,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                 system=args.get("system"),
                 tools=args.get("tools"),
                 backend=args.get("backend"),
+                image_paths=args.get("imagePaths") or args.get("image_paths"),
             )
             return tool_error(request_id, error) if error else tool_success(request_id, payload or {})
 
@@ -820,6 +888,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                 system=args.get("system"),
                 tools=args.get("tools"),
                 backend=args.get("backend"),
+                image_paths=args.get("imagePaths") or args.get("image_paths"),
             )
             return tool_error(request_id, error) if error else tool_success(request_id, payload or {})
 
@@ -830,6 +899,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                 system=args.get("system"),
                 tools=args.get("tools"),
                 backend=args.get("backend"),
+                image_paths=args.get("imagePaths") or args.get("image_paths"),
             )
             return tool_error(request_id, error) if error else tool_success(request_id, payload or {})
 
@@ -844,6 +914,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                 system=args.get("system"),
                 tools=args.get("tools"),
                 backend=args.get("backend"),
+                image_paths=args.get("imagePaths") or args.get("image_paths"),
             )
             return tool_error(request_id, error) if error else tool_success(request_id, payload or {})
 
