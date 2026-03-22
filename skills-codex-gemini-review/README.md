@@ -117,6 +117,13 @@ codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api -- python3 ~/.codex/
 
 The bridge defaults to the direct Gemini API path. This is the intended reviewer backend for this overlay.
 
+If the default API model is temporarily rate-limited on your current free-tier window, keep the same overlay and bridge, and override only the reviewer model:
+
+```bash
+codex mcp remove gemini-review
+codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api --env GEMINI_REVIEW_MODEL=gemini-flash-latest -- python3 ~/.codex/mcp-servers/gemini-review/server.py
+```
+
 ## Why this exists
 
 The upstream `skills/skills-codex/` path already supports Codex-native execution with a second Codex reviewer via `spawn_agent`.
@@ -147,6 +154,7 @@ This overlay was validated in two ways:
 Operational note:
 
 - Gemini free tier was usable for this workflow in practice, but bursty stress tests could still produce temporary `429` responses
+- on the same setup, a later retry completed sync review, async `review_start` -> `review_status`, and threaded `review_reply_start` -> `review_status` successfully with `GEMINI_REVIEW_MODEL=gemini-flash-latest`
 - for long prompts, prefer the async `review_start` / `review_reply_start` + `review_status` path
 
 ## References

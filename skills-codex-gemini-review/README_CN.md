@@ -117,6 +117,13 @@ codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api -- python3 ~/.codex/
 
 bridge 默认直接走 Gemini API。这也是这套 overlay 预期使用的 reviewer backend。
 
+如果默认 API 模型在你当前免费层窗口里临时被限流，不需要改 overlay 和 bridge 结构，只需要覆盖 reviewer model：
+
+```bash
+codex mcp remove gemini-review
+codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api --env GEMINI_REVIEW_MODEL=gemini-flash-latest -- python3 ~/.codex/mcp-servers/gemini-review/server.py
+```
+
 ## 为什么需要这个包
 
 上游 `skills/skills-codex/` 已经支持 Codex 原生执行，并通过 `spawn_agent` 使用第二个 Codex 做 reviewer。
@@ -147,6 +154,7 @@ bridge 默认直接走 Gemini API。这也是这套 overlay 预期使用的 revi
 实际使用上的结论：
 
 - Gemini 免费层对这条工作流是可用的，但密集压测时仍可能出现临时 `429`
+- 在同一套环境上的后续重试里，把 `GEMINI_REVIEW_MODEL` 设为 `gemini-flash-latest` 后，同步 review、异步 `review_start` -> `review_status`、以及带 thread 的 `review_reply_start` -> `review_status` 都已跑通
 - 对长 prompt，优先使用异步 `review_start` / `review_reply_start` + `review_status`
 
 ## 引用与来源
