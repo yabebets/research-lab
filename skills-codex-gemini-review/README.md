@@ -32,6 +32,58 @@ Current overrides:
 - `paper-writing`
 - `auto-paper-improvement-loop`
 
+## Core 8 vs Full 15
+
+To avoid confusion, there are two useful ways to describe this overlay:
+
+- **Core 8**: the direct reviewer-heavy overlay set that maps one-to-one to the earlier Claude-review route
+- **Full 15**: the current reviewer-aware Codex skill surface routed to Gemini in this repository
+
+The **core 8** are:
+
+- `research-review`
+- `novelty-check`
+- `research-refine`
+- `auto-review-loop`
+- `paper-plan`
+- `paper-figure`
+- `paper-write`
+- `auto-paper-improvement-loop`
+
+The additional **7** routed reviewer-aware entry points are:
+
+- `idea-creator`
+- `idea-discovery`
+- `idea-discovery-robot`
+- `grant-proposal`
+- `paper-writing`
+- `paper-slides`
+- `paper-poster`
+
+So when comparing against the Claude overlay, the cleanest statement is:
+
+> The Gemini route preserves the same core 8-skill reviewer overlay shape, but expands the practical reviewer-facing surface to 15 skills in the current repo.
+
+## Direct Consumers vs Wrappers
+
+- **12 direct consumers** call `mcp__gemini-review__review_start` / `review_reply_start` / `review_status` themselves:
+  - `research-review`
+  - `novelty-check`
+  - `research-refine`
+  - `auto-review-loop`
+  - `paper-plan`
+  - `paper-figure`
+  - `paper-write`
+  - `auto-paper-improvement-loop`
+  - `idea-creator`
+  - `grant-proposal`
+  - `paper-slides`
+  - `paper-poster`
+- **3 wrappers** mostly orchestrate downstream reviewer-aware skills and pass `REVIEWER_MODEL=gemini-review` through:
+  - `idea-discovery`
+  - `idea-discovery-robot`
+  - `paper-writing`
+
 ## Install
 
 Before registering the bridge, prepare the direct Gemini API path:

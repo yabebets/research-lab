@@ -32,6 +32,58 @@
 - `paper-writing`
 - `auto-paper-improvement-loop`
 
+## 核心 8 个 vs 完整 15 个
+
+为了避免误解，这个 overlay 有两种常用描述方式：
+
+- **核心 8 个**：和早先 Claude-review 路线一一对齐的 reviewer-heavy overlay 核心集合
+- **完整 15 个**：当前这个仓库里实际已经切到 Gemini reviewer 的 reviewer-aware Codex 技能面
+
+其中 **核心 8 个** 是：
+
+- `research-review`
+- `novelty-check`
+- `research-refine`
+- `auto-review-loop`
+- `paper-plan`
+- `paper-figure`
+- `paper-write`
+- `auto-paper-improvement-loop`
+
+额外扩展的 **7 个** reviewer-aware 入口是：
+
+- `idea-creator`
+- `idea-discovery`
+- `idea-discovery-robot`
+- `grant-proposal`
+- `paper-writing`
+- `paper-slides`
+- `paper-poster`
+
+所以和 Claude overlay 对比时，最准确的一句话是：
+
+> Gemini 这条路保持了相同的核心 8-skill reviewer overlay 形状，但在当前仓库里把实际 reviewer 入口扩展到了 15 个。
+
+## 直接消费者 vs wrapper
+
+- **12 个直接消费者**：自己直接调用 `mcp__gemini-review__review_start` / `review_reply_start` / `review_status`
+  - `research-review`
+  - `novelty-check`
+  - `research-refine`
+  - `auto-review-loop`
+  - `paper-plan`
+  - `paper-figure`
+  - `paper-write`
+  - `auto-paper-improvement-loop`
+  - `idea-creator`
+  - `grant-proposal`
+  - `paper-slides`
+  - `paper-poster`
+- **3 个 wrapper**：主要串联下游 reviewer-aware skill，并传递 `REVIEWER_MODEL=gemini-review`
+  - `idea-discovery`
+  - `idea-discovery-robot`
+  - `paper-writing`
+
 ## 安装方式
 
 注册 bridge 之前，请先准备好 direct Gemini API 路径：
