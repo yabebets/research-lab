@@ -61,6 +61,7 @@ is enough for API mode without exporting the variable in every shell.
 
 - The bridge defaults to the direct Gemini API path. This is the intended reviewer backend for the ARIS skill overlay.
 - `GEMINI_REVIEW_BACKEND=auto` is still supported if you want API-first auto-selection, and `GEMINI_REVIEW_BACKEND=cli` is available as an explicit fallback.
+- If the default API model is temporarily rate-limited on your current free-tier window, keep the same bridge and set `GEMINI_REVIEW_MODEL=gemini-flash-latest` as a model override.
 - The `tools` argument is accepted for compatibility with existing skills, but is ignored. This matches the original pattern where the external reviewer only sees the prompt context prepared by Codex.
 - `imagePaths` / `image_paths` are supported only by the direct Gemini API backend in this bridge. CLI fallback remains text-only.
 - `threadId` is a bridge-local conversation id persisted under `~/.codex/state/gemini-review/threads/` by default and can be passed to `review_reply`.
@@ -82,6 +83,7 @@ This bridge was validated against the ARIS reviewer workflow in a privacy-safe w
 Important nuance from testing:
 
 - Gemini free tier was sufficient for development-style validation, but bursty back-to-back runs could still trigger temporary `429` responses
+- on the same setup, a later retry completed sync review, async `review_start` -> `review_status`, and threaded `review_reply_start` -> `review_status` successfully with `GEMINI_REVIEW_MODEL=gemini-flash-latest`
 - long synchronous reviewer calls can still hit host-side MCP tool timeouts before Gemini responds
 - because of that, the async path is not just an implementation detail; it is the recommended operational path for long reviews
 
