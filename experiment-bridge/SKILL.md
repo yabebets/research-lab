@@ -224,6 +224,17 @@ As experiments complete:
 → /auto-review-loop "[topic]"
 ```
 
+### Phase 5.5: Auto Ablation Planning
+
+After main experiments (M2) complete with positive results, invoke `/ablation-planner` to design ablation studies:
+
+- Read the main results and method description
+- Generate a claim-driven ablation plan: which components to remove, what to compare, expected outcomes
+- Append ablation blocks to `refine-logs/EXPERIMENT_PLAN.md` and `refine-logs/EXPERIMENT_TRACKER.md`
+- If main results are negative or inconclusive, skip ablation planning and note in the summary
+
+If `/ablation-planner` is not available, skip silently — the existing EXPERIMENT_PLAN.md ablation blocks (if any) remain unchanged.
+
 ### Phase 6: Handoff
 
 Present final status:
