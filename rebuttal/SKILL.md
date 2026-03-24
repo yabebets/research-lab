@@ -44,6 +44,7 @@ Workflow 4:   rebuttal (post-submission external reviews)
 - **MAX_INTERNAL_DRAFT_ROUNDS = 2** — draft → lint → revise.
 - **MAX_STRESS_TEST_ROUNDS = 1** — One Codex MCP critique round.
 - **MAX_FOLLOWUP_ROUNDS = 3** — per reviewer thread.
+- **AUTO_EXPERIMENT = false** — When `true`, automatically invoke `/experiment-bridge` to run supplementary experiments when the strategy plan identifies reviewer concerns that require new empirical evidence. When `false` (default), pause and present the evidence gap to the user for manual handling.
 - **REBUTTAL_DIR = `rebuttal/`**
 
 > Override: `/rebuttal "paper/" — venue: NeurIPS, character limit: 5000`
@@ -102,6 +103,34 @@ Create `rebuttal/STRATEGY_PLAN.md`.
 3. Build **character budget** (10-15% opener, 75-80% per-reviewer, 5-10% closing)
 4. Identify **blocked claims** (ungrounded or unapproved)
 5. If unresolved blockers → pause and present to user
+
+### Phase 3.5: Evidence Sprint (when AUTO_EXPERIMENT = true)
+
+**Skip entirely if `AUTO_EXPERIMENT` is `false` — instead, pause and present the evidence gaps to the user.**
+
+If the strategy plan identifies issues that require new empirical evidence (tagged `response_mode: grounded_evidence` with `evidence_source: needs_experiment`):
+
+1. Generate a mini experiment plan from the reviewer concerns:
+   - What to run (ablation, baseline comparison, scale-up, condition check)
+   - Success criterion (what result would satisfy the reviewer)
+   - Estimated GPU-hours
+
+2. Invoke `/experiment-bridge` with the mini plan:
+   ```
+   /experiment-bridge "rebuttal/REBUTTAL_EXPERIMENT_PLAN.md"
+   ```
+
+3. Wait for results, then update `ISSUE_BOARD.md`:
+   - Tag completed experiments as `user_confirmed_result`
+   - Update evidence source for relevant issue cards
+
+4. If experiments fail or are inconclusive:
+   - Switch response mode to `narrow_concession` or `future_work_boundary`
+   - Do NOT fabricate positive results
+
+5. Save experiment results to `rebuttal/REBUTTAL_EXPERIMENTS.md` for provenance tracking.
+
+**Time guard**: If estimated GPU-hours exceed rebuttal deadline, skip and flag for manual handling.
 
 ### Phase 4: Draft Initial Rebuttal
 
