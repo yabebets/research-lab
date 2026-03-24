@@ -164,12 +164,26 @@ mcp__codex__codex:
 
 Save full response to `rebuttal/MCP_STRESS_TEST.md`. If hard safety blocker → revise before finalizing.
 
-### Phase 7: Finalize
+### Phase 7: Finalize — Two Versions
 
-1. Produce `rebuttal/REBUTTAL_DRAFT_final.md`
-2. Produce `rebuttal/PASTE_READY.txt` with exact character count
+Produce **two outputs** for different purposes:
+
+1. **`rebuttal/PASTE_READY.txt`** — the strict version
+   - Plain text, exact character count, fits venue limit
+   - Ready to paste directly into OpenReview / CMT / HotCRP
+   - No markdown formatting, no extras
+
+2. **`rebuttal/REBUTTAL_DRAFT_rich.md`** — the extended version
+   - Same structure but with **more detail**: fuller explanations, additional evidence, optional paragraphs
+   - Marked with `[OPTIONAL — cut if over limit]` for sections that exceed the strict version
+   - Author can read this to understand the full reasoning, then manually decide what to keep/cut/rewrite
+   - Useful for follow-up rounds — the extra material is pre-written
+
 3. Update `rebuttal/REBUTTAL_STATE.md`
-4. Present to user with count + remaining risks + lines needing manual approval
+4. Present to user:
+   - `PASTE_READY.txt` character count vs venue limit
+   - `REBUTTAL_DRAFT_rich.md` for review and manual editing
+   - Remaining risks + lines needing manual approval
 
 ### Phase 8: Follow-Up Rounds
 
