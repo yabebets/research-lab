@@ -12,18 +12,16 @@ set -euo pipefail
 ARIS_META_DIR="${CLAUDE_PROJECT_DIR:-.}/.aris/meta"
 mkdir -p "$ARIS_META_DIR"
 
-# Read entire stdin into variable
-PAYLOAD="$(cat)"
+# Read stdin payload into env var (cannot use heredoc + herestring simultaneously)
+export ARIS_HOOK_PAYLOAD="$(cat)"
 
-# Process with python3 — stdin payload passed via heredoc
-python3 - "$ARIS_META_DIR/events.jsonl" << 'PYEOF' <<< "$PAYLOAD"
+python3 - "$ARIS_META_DIR/events.jsonl" << 'PYEOF'
 import json, sys, os
 from datetime import datetime, timezone
 
 log_file = sys.argv[1]
 
-# Read payload from stdin
-raw = sys.stdin.read().strip()
+raw = os.environ.get("ARIS_HOOK_PAYLOAD", "").strip()
 if not raw:
     sys.exit(0)
 try:
