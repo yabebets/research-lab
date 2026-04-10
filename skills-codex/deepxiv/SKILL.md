@@ -85,11 +85,11 @@ Fallbacks:
 ```bash
 deepxiv search "QUERY" --limit MAX_RESULTS --format json
 deepxiv paper ARXIV_ID --brief --format json
-deepxiv paper ARXIV_ID --head
+deepxiv paper ARXIV_ID --head --format json
 deepxiv paper ARXIV_ID --section "SECTION_NAME" --format json
-deepxiv trending --days 7 --limit MAX_RESULTS --json
-deepxiv wsearch "QUERY" --json
-deepxiv sc "SEMANTIC_SCHOLAR_ID" --json
+deepxiv trending --days 7 --limit MAX_RESULTS --output json
+deepxiv wsearch "QUERY" --output json
+deepxiv sc "SEMANTIC_SCHOLAR_ID" --output json
 ```
 
 ### Step 4: Present Results

@@ -108,7 +108,7 @@ python3 tools/deepxiv_fetch.py paper-head ARXIV_ID
 Fallback:
 
 ```bash
-deepxiv paper ARXIV_ID --head
+deepxiv paper ARXIV_ID --head --format json
 ```
 
 **Specific section**
@@ -132,7 +132,7 @@ python3 tools/deepxiv_fetch.py trending --days 7 --max MAX_RESULTS
 Fallback:
 
 ```bash
-deepxiv trending --days 7 --limit MAX_RESULTS --json
+deepxiv trending --days 7 --limit MAX_RESULTS --output json
 ```
 
 **Web search**
@@ -144,7 +144,7 @@ python3 tools/deepxiv_fetch.py wsearch "QUERY"
 Fallback:
 
 ```bash
-deepxiv wsearch "QUERY" --json
+deepxiv wsearch "QUERY" --output json
 ```
 
 **Semantic Scholar metadata**
@@ -156,7 +156,7 @@ python3 tools/deepxiv_fetch.py sc "SEMANTIC_SCHOLAR_ID"
 Fallback:
 
 ```bash
-deepxiv sc "SEMANTIC_SCHOLAR_ID" --json
+deepxiv sc "SEMANTIC_SCHOLAR_ID" --output json
 ```
 
 ### Step 4: Present Results
