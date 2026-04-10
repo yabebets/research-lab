@@ -3,7 +3,7 @@
 When writing any output file that would overwrite an existing file, use timestamped filename + fixed-name latest copy:
 
 1. Write output to timestamped file: `{FILENAME}_{YYYYMMDD_HHmmss}.md` (or `.json`, `.tex` as appropriate)
-   - Timestamp precision to seconds to avoid same-day collisions
+   - Timestamp precision to seconds to reduce collisions. In the rare case of sub-second conflicts, append `_2`, `_3` etc.
    - Place the timestamped file in the same directory as the fixed-name file
 2. Copy the same content to the fixed-name file: `{FILENAME}.md` (overwrites the previous latest copy)
 3. Downstream skills always read the fixed-name file — they do not need to know about timestamps
@@ -71,6 +71,7 @@ Never delete timestamped files. They are the permanent history.
 
 Before reading a state file (`REFINE_STATE.json`, `REVIEW_STATE.json`, `DSE_STATE.json`):
 1. Check the file's last modified time via `ls -la` or `stat`
-2. If older than 48 hours, warn the user:
-   "⚠️ State file {filename} is {N} days old. It may be from a previous research direction. Continue with this state, or start fresh?"
-3. If the user chooses to start fresh, write a timestamped archive copy and proceed without the old state
+2. Default staleness threshold: **24 hours** (individual skills may override — e.g., `auto-review-loop` uses 24h, `research-refine` uses 24h). If a skill defines its own threshold, that takes precedence.
+3. If older than the threshold, warn the user:
+   "⚠️ State file {filename} is {N} hours/days old. It may be from a previous research direction. Continue with this state, or start fresh?"
+4. If the user chooses to start fresh, write a timestamped archive copy and proceed without the old state
