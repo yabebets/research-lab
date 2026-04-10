@@ -152,7 +152,7 @@ def _dispatch_json(args: argparse.Namespace) -> dict | list:
         return run_cli_json(["paper", args.arxiv_id, "--brief", "--format", "json"])
 
     if args.command == "paper-head":
-        return run_cli_json(["paper", args.arxiv_id, "--head"])
+        return run_cli_json(["paper", args.arxiv_id, "--head", "--format", "json"])
 
     if args.command == "paper-section":
         return run_cli_json(
@@ -174,15 +174,16 @@ def _dispatch_json(args: argparse.Namespace) -> dict | list:
                 str(args.days),
                 "--limit",
                 str(args.max_results),
-                "--json",
+                "--output",
+                "json",
             ]
         )
 
     if args.command == "wsearch":
-        return run_cli_json(["wsearch", args.query, "--json"])
+        return run_cli_json(["wsearch", args.query, "--output", "json"])
 
     if args.command == "sc":
-        return run_cli_json(["sc", args.semantic_scholar_id, "--json"])
+        return run_cli_json(["sc", args.semantic_scholar_id, "--output", "json"])
 
     if args.command == "health":
         text = run_cli_text(["health"])
