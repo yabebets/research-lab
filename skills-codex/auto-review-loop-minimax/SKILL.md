@@ -13,7 +13,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 
 - MAX_ROUNDS = 4
 - POSITIVE_THRESHOLD: score >= 6/10, or verdict contains "accept", "sufficient", "ready for submission"
-- REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log)
+- REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
 - REVIEWER_MODEL = `MiniMax-M2.7` — Model used via MiniMax API
 
 ## API Configuration
@@ -77,13 +77,13 @@ Long-running loops may hit the context window limit, triggering automatic compac
 
 ### Initialization
 
-1. **Check for `review-stage/REVIEW_STATE.json`**:
-   - If it does not exist: **fresh start** (normal case)
+1. **Check for `review-stage/REVIEW_STATE.json`** *(fall back to `./REVIEW_STATE.json` if not found — legacy path)*:
+   - If neither path exists: **fresh start** (normal case)
    - If it exists AND `status` is `"completed"`: **fresh start** (previous loop finished normally)
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is older than 24 hours: **fresh start** (stale state from a killed/abandoned run — delete the file and start over)
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is within 24 hours: **resume**
      - Read the state file to recover `round`, `last_score`, `pending_experiments`
-     - Read `review-stage/AUTO_REVIEW.md` to restore full context of prior rounds
+     - Read `review-stage/AUTO_REVIEW.md` to restore full context of prior rounds *(fall back to `./AUTO_REVIEW.md`)*
      - If `pending_experiments` is non-empty, check if they have completed (e.g., check screen sessions)
      - Resume from the next round (round = saved round + 1)
      - Log: "Recovered from context compaction. Resuming at Round N."

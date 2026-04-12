@@ -34,6 +34,7 @@ Then append one row per output file written:
 ## Pre-flight Check
 
 Before writing output, if the skill depends on a prerequisite file from a previous stage:
-1. Check if the prerequisite file exists at its expected path
-2. If not found, warn: "⚠️ Expected {file} (from {skill}) but not found. Run {skill} first?"
-3. Do not block — the user may have the file elsewhere or want to proceed anyway
+1. Check if the prerequisite file exists at its expected stage-scoped path (e.g., `idea-stage/IDEA_REPORT.md`, `review-stage/AUTO_REVIEW.md`)
+2. If not found at the stage-scoped path, check the legacy root-level path (e.g., `./IDEA_REPORT.md`, `./AUTO_REVIEW.md`) — see [Path Fallback Rule](output-versioning.md#path-fallback-rule-backward-compatibility)
+3. If not found at either path, warn: "⚠️ Expected {file} (from {skill}) but not found. Run {skill} first?"
+4. Do not block — the user may have the file elsewhere or want to proceed anyway

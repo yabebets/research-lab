@@ -13,7 +13,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 
 - MAX_ROUNDS = 4
 - POSITIVE_THRESHOLD: score >= 6/10, or verdict contains "accept", "sufficient", "ready for submission"
-- REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log)
+- REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
 
 ## LLM Configuration
 
@@ -103,7 +103,7 @@ Persist state to `review-stage/REVIEW_STATE.json` after each round:
 
 ### Initialization
 
-1. **Check `review-stage/REVIEW_STATE.json`** for recovery
+1. **Check `review-stage/REVIEW_STATE.json`** for recovery *(fall back to `./REVIEW_STATE.json` if not found — legacy path)*
 2. Read project context and prior reviews
 3. Initialize round counter
 

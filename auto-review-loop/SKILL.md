@@ -15,7 +15,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 
 - MAX_ROUNDS = 4
 - POSITIVE_THRESHOLD: score >= 6/10, or verdict contains "accept", "sufficient", "ready for submission"
-- REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log)
+- REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
 - REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for GPT-5.4 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
 - **OUTPUT_DIR = `review-stage/`** — All review-stage outputs go here. Create the directory if it doesn't exist.
@@ -60,13 +60,13 @@ Long-running loops may hit the context window limit, triggering automatic compac
 
 ### Initialization
 
-1. **Check for `review-stage/REVIEW_STATE.json`**:
-   - If it does not exist: **fresh start** (normal case, identical to behavior before this feature existed)
+1. **Check for `review-stage/REVIEW_STATE.json`** *(fall back to `./REVIEW_STATE.json` if not found — legacy path)*:
+   - If neither path exists: **fresh start** (normal case, identical to behavior before this feature existed)
    - If it exists AND `status` is `"completed"`: **fresh start** (previous loop finished normally)
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is older than 24 hours: **fresh start** (stale state from a killed/abandoned run — delete the file and start over)
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is within 24 hours: **resume**
      - Read the state file to recover `round`, `threadId`, `last_score`, `pending_experiments`
-     - Read `review-stage/AUTO_REVIEW.md` to restore full context of prior rounds
+     - Read `review-stage/AUTO_REVIEW.md` to restore full context of prior rounds *(fall back to `./AUTO_REVIEW.md`)*
      - If `pending_experiments` is non-empty, check if they have completed (e.g., check screen sessions)
      - Resume from the next round (round = saved round + 1)
      - Log: "Recovered from context compaction. Resuming at Round N."
