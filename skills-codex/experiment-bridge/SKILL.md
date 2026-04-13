@@ -35,8 +35,8 @@ This skill expects one or more of:
 1. **`refine-logs/EXPERIMENT_PLAN.md`** (best) — claim-driven experiment roadmap from `/experiment-plan`
 2. **`refine-logs/EXPERIMENT_TRACKER.md`** — run-by-run execution table
 3. **`refine-logs/FINAL_PROPOSAL.md`** — method description for implementation context
-4. **`idea-stage/IDEA_CANDIDATES.md`** — compact idea summary (preferred when `COMPACT = true`)
-5. **`idea-stage/IDEA_REPORT.md`** — fallback if refine-logs don't exist
+4. **`idea-stage/IDEA_CANDIDATES.md`** — compact idea summary (preferred when `COMPACT = true`) *(fall back to `./IDEA_CANDIDATES.md` if not found)*
+5. **`idea-stage/IDEA_REPORT.md`** — fallback if refine-logs don't exist *(fall back to `./IDEA_REPORT.md` if not found)*
 
 If none exist, ask the user what experiments to implement.
 

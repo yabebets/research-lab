@@ -23,7 +23,7 @@ The skill expects one or more of these in the project directory:
 2. **review-stage/AUTO_REVIEW.md** — auto-review loop conclusions *(fall back to `./AUTO_REVIEW.md` if not found)*
 3. **Experiment results** — JSON files in `figures/`, screen logs, tables
 4. **idea-stage/IDEA_REPORT.md** — from idea-discovery pipeline (if applicable) *(fall back to `./IDEA_REPORT.md` if not found)*
-5. **Compact files** (if available): `IDEA_CANDIDATES.md`, `findings.md`, `EXPERIMENT_LOG.md` — preferred over full files when present, saves context window
+5. **Compact files** (if available): `idea-stage/IDEA_CANDIDATES.md` *(fall back to `./IDEA_CANDIDATES.md` if not found)*, `findings.md`, `EXPERIMENT_LOG.md` — preferred over full files when present, saves context window
 
 If none exist, ask the user to describe the paper's contribution in 3-5 sentences.
 
