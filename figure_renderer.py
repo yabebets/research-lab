@@ -163,6 +163,10 @@ def validate_spec(spec: dict) -> list:
     """Validate FigureSpec, return list of issues."""
     issues = []
 
+    # Top-level must be a dict
+    if not isinstance(spec, dict):
+        return [f"CRITICAL: spec must be a JSON object, got {type(spec).__name__}"]
+
     # Structure validation — ensure top-level fields are correct types
     canvas = spec.get("canvas", {})
     if not isinstance(canvas, dict):
@@ -204,8 +208,8 @@ def validate_spec(spec: dict) -> list:
             issues.append(f"CRITICAL: style.palette must be a non-empty list of hex colors")
         else:
             for pi, pc in enumerate(pal):
-                if not HEX_COLOR_RE.match(str(pc)):
-                    issues.append(f"WARN: style.palette[{pi}] '{pc}' is not a valid hex color")
+                if not isinstance(pc, str) or not HEX_COLOR_RE.match(pc):
+                    issues.append(f"CRITICAL: style.palette[{pi}] '{pc}' is not a valid hex color (#RRGGBB)")
 
     nodes = spec.get("nodes", [])
     if not nodes:
@@ -260,7 +264,11 @@ def validate_spec(spec: dict) -> list:
         if not isinstance(group, dict):
             issues.append(f"CRITICAL: groups[{i}] must be a dict")
             continue
-        for nid in group.get("node_ids", []):
+        node_ids_list = group.get("node_ids", [])
+        if not isinstance(node_ids_list, list):
+            issues.append(f"WARN: group[{i}] node_ids must be a list")
+            continue
+        for nid in node_ids_list:
             if nid not in node_ids:
                 issues.append(f"WARN: group[{i}] references unknown node '{nid}'")
 
