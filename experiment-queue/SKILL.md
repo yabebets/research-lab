@@ -46,6 +46,11 @@ A manifest lists jobs with explicit state:
 project: dllm_distill
 cwd: /home/rfyang/rfyang_code/dllm_experiments_torch
 conda: dllm
+# Optional: override conda hook path if conda is not at a standard location.
+# Can be a bare path (wrapped automatically) or a full `eval "$(... shell.bash hook)"` string.
+# Falls back to auto-detect of ~/anaconda3, ~/miniconda3, /opt/anaconda3, etc.,
+# or the ARIS_CONDA_HOOK environment variable.
+# conda_hook: /custom/path/to/conda
 ssh: SJTUServer5
 default_cmd: >
   python run_pc_distill_exp.py --backbone softmax --lam 0.5
@@ -57,6 +62,7 @@ preconditions:
 
 gpus: [0, 1, 2, 3, 4, 5, 6, 7]
 max_parallel: 8
+gpu_free_threshold_mib: 500  # optional, default 500; raise for shared servers, lower for tight packing
 oom_retry:
   delay: 120
   max_attempts: 3
