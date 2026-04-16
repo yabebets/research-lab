@@ -49,8 +49,48 @@ from pathlib import Path
 
 
 OOM_RE = re.compile(r"(CUDA out of memory|torch\.OutOfMemoryError)")
-GPU_FREE_THRESHOLD_MIB = 500
+DEFAULT_GPU_FREE_THRESHOLD_MIB = 500
 POLL_INTERVAL_SEC = 60
+
+
+def resolve_conda_hook(manifest_hook=None):
+    """Resolve conda hook command via (1) manifest, (2) env var, (3) auto-detect, (4) PATH.
+
+    manifest_hook: value of `conda_hook` field in manifest (full hook command, e.g.
+        `eval "$(/custom/path/conda shell.bash hook)"`), or a bare conda binary path
+        which will be wrapped automatically.
+    """
+    def wrap(path_or_cmd):
+        if path_or_cmd.startswith("eval"):
+            return path_or_cmd
+        return f'eval "$({path_or_cmd} shell.bash hook)"'
+
+    # 1. Manifest override
+    if manifest_hook:
+        return wrap(manifest_hook)
+    # 2. Env var override
+    env_hook = os.environ.get("ARIS_CONDA_HOOK")
+    if env_hook:
+        return wrap(env_hook)
+    # 3. Auto-detect common install paths
+    for p in (
+        os.path.expanduser("~/anaconda3/bin/conda"),
+        os.path.expanduser("~/miniconda3/bin/conda"),
+        os.path.expanduser("~/miniforge3/bin/conda"),
+        "/opt/anaconda3/bin/conda",
+        "/opt/miniconda3/bin/conda",
+        "/opt/miniforge3/bin/conda",
+        "/usr/local/anaconda3/bin/conda",
+        "/opt/homebrew/anaconda3/bin/conda",
+    ):
+        if os.path.exists(p):
+            return wrap(p)
+    # 4. Fall back to PATH
+    out, rc = run("command -v conda 2>/dev/null")
+    if rc == 0 and out.strip():
+        return wrap(out.strip())
+    # 5. Last resort
+    return 'eval "$(conda shell.bash hook)"'
 
 
 def now():
@@ -73,10 +113,10 @@ def gpu_memory_used():
     return [int(x.strip()) for x in out.strip().split("\n") if x.strip()]
 
 
-def free_gpus(allowed):
+def free_gpus(allowed, threshold_mib=DEFAULT_GPU_FREE_THRESHOLD_MIB):
     """Return list of GPU indices with memory.used < threshold."""
     used = gpu_memory_used()
-    return [i for i in allowed if i < len(used) and used[i] < GPU_FREE_THRESHOLD_MIB]
+    return [i for i in allowed if i < len(used) and used[i] < threshold_mib]
 
 
 def screen_exists(name):
@@ -185,7 +225,7 @@ def assign_jobs_to_phases(manifest, state):
                 })
 
 
-def launch_job(job, gpu, conda_env, cwd, log_dir):
+def launch_job(job, gpu, conda_env, cwd, log_dir, conda_hook):
     """Launch job in a detached screen, return (screen_name, pid)."""
     screen_name = f"EQ_{job['id']}"
     if screen_exists(screen_name):
@@ -198,7 +238,7 @@ def launch_job(job, gpu, conda_env, cwd, log_dir):
     cmd_with_gpu = cmd.replace("${GPU}", str(gpu))
     full = (
         f'cd {shlex.quote(cwd)} && '
-        f'eval "$(/opt/anaconda3/bin/conda shell.bash hook)" && '
+        f'{conda_hook} && '
         f'conda activate {conda_env} && '
         f'CUDA_VISIBLE_DEVICES={gpu} {cmd_with_gpu} 2>&1 | tee {shlex.quote(log_file)}'
     )
@@ -261,8 +301,11 @@ def step(manifest, state, state_file, log_dir):
     """Run one scheduler step: poll, launch, update state."""
     cwd = manifest.get("cwd", ".")
     conda_env = manifest.get("conda", "base")
+    conda_hook = resolve_conda_hook(manifest.get("conda_hook"))
     allowed_gpus = manifest.get("gpus", list(range(8)))
     max_parallel = manifest.get("max_parallel", len(allowed_gpus))
+    gpu_free_threshold = manifest.get("gpu_free_threshold_mib",
+                                       DEFAULT_GPU_FREE_THRESHOLD_MIB)
     oom_delay = manifest.get("oom_retry", {}).get("delay", 120)
     max_oom_attempts = manifest.get("oom_retry", {}).get("max_attempts", 3)
 
@@ -308,7 +351,7 @@ def step(manifest, state, state_file, log_dir):
     # 3. Launch new jobs up to max_parallel
     running = [j for j in state["jobs"] if j["status"] == "running"]
     pending = pending_jobs_in_active_phases(state, manifest)
-    free = free_gpus(allowed_gpus)
+    free = free_gpus(allowed_gpus, gpu_free_threshold)
     # Exclude GPUs already assigned to running jobs
     taken = {j["gpu"] for j in running if j.get("gpu") is not None}
     free = [g for g in free if g not in taken]
@@ -317,7 +360,7 @@ def step(manifest, state, state_file, log_dir):
     for i in range(slots):
         job = pending[i]
         gpu = free[i]
-        screen_name, pid = launch_job(job, gpu, conda_env, cwd, log_dir)
+        screen_name, pid = launch_job(job, gpu, conda_env, cwd, log_dir, conda_hook)
         job["status"] = "running"
         job["gpu"] = gpu
         job["screen_name"] = screen_name
