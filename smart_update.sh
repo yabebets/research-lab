@@ -6,13 +6,19 @@
 # Usage:
 #   Global (default):
 #     bash tools/smart_update.sh [--apply]
-#   Project-level:
+#   Project-level (Claude Code):
 #     bash tools/smart_update.sh --project <path> [--apply]
+#   Project-level (Codex CLI):
+#     bash tools/smart_update.sh --project <path> --target-subdir .agents/skills/aris [--apply]
 #   Custom paths:
 #     bash tools/smart_update.sh --upstream <path> --local <path> [--apply]
 #
 #   --apply: actually perform the updates (default: dry-run analysis only)
-#   --project <path>: project root — upstream from repo, local from <path>/.claude/skills
+#   --project <path>: project root — upstream from repo, local from <path>/<target-subdir>
+#   --target-subdir <relative>: project-mode skill subdirectory (default: .claude/skills)
+#                               common values: .claude/skills, .claude/skills/aris,
+#                                              .agents/skills, .agents/skills/aris
+#                               must be a relative path
 #   --upstream <path>: explicit upstream skills directory
 #   --local <path>: explicit local skills directory
 
@@ -22,6 +28,7 @@ set -euo pipefail
 APPLY=false
 MODE="global"
 PROJECT_PATH=""
+TARGET_SUBDIR=".claude/skills"
 CUSTOM_UPSTREAM=""
 CUSTOM_LOCAL=""
 
@@ -36,6 +43,15 @@ while [[ $# -gt 0 ]]; do
             PROJECT_PATH="${2:?--project requires a path argument}"
             shift 2
             ;;
+        --target-subdir)
+            TARGET_SUBDIR="${2:?--target-subdir requires a relative path argument}"
+            if [[ "$TARGET_SUBDIR" == /* ]]; then
+                echo "Error: --target-subdir must be a relative path (got: $TARGET_SUBDIR)" >&2
+                echo "Hint: use --local for absolute paths" >&2
+                exit 1
+            fi
+            shift 2
+            ;;
         --upstream)
             MODE="explicit"
             CUSTOM_UPSTREAM="${2:?--upstream requires a path argument}"
@@ -48,7 +64,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: bash tools/smart_update.sh [--apply] [--project <path>] [--upstream <path> --local <path>]"
+            echo "Usage: bash tools/smart_update.sh [--apply] [--project <path> [--target-subdir <rel>]] [--upstream <path> --local <path>]"
             exit 1
             ;;
     esac
@@ -67,9 +83,20 @@ case "$MODE" in
         fi
         # Upstream always from repo
         UPSTREAM_DIR="$REPO_SKILLS_DIR"
-        # Local targets the project's .claude/skills
-        LOCAL_DIR="$PROJECT_ROOT/.claude/skills"
-        SCOPE="Project: $PROJECT_ROOT"
+        LOCAL_DIR="$PROJECT_ROOT/$TARGET_SUBDIR"
+        SCOPE="Project: $PROJECT_ROOT (subdir: $TARGET_SUBDIR)"
+
+        # Platform marker auto-detect: warn on mismatch (never silently switch)
+        HAS_CLAUDE_MARKERS=false
+        HAS_CODEX_MARKERS=false
+        [[ -e "$PROJECT_ROOT/CLAUDE.md" || -e "$PROJECT_ROOT/.claude/skills" || -e "$PROJECT_ROOT/.claude/settings.json" ]] && HAS_CLAUDE_MARKERS=true
+        [[ -e "$PROJECT_ROOT/AGENTS.md" || -e "$PROJECT_ROOT/.agents/skills" || -e "$PROJECT_ROOT/.codex/config.toml" ]] && HAS_CODEX_MARKERS=true
+        if $HAS_CLAUDE_MARKERS && ! $HAS_CODEX_MARKERS && [[ "$TARGET_SUBDIR" == .agents/* ]]; then
+            echo -e "\033[1;33m⚠️  Warning: project has Claude markers but --target-subdir points to Codex path ($TARGET_SUBDIR)\033[0m" >&2
+        fi
+        if $HAS_CODEX_MARKERS && ! $HAS_CLAUDE_MARKERS && [[ "$TARGET_SUBDIR" == .claude/* ]]; then
+            echo -e "\033[1;33m⚠️  Warning: project has Codex markers but --target-subdir points to Claude path ($TARGET_SUBDIR)\033[0m" >&2
+        fi
         ;;
     explicit)
         if [[ -z "$CUSTOM_UPSTREAM" ]] || [[ -z "$CUSTOM_LOCAL" ]]; then
@@ -87,6 +114,22 @@ case "$MODE" in
         SCOPE="Global"
         ;;
 esac
+
+# ─── Refuse to operate on symlinked installs (those use git pull, not smart_update) ──
+if [[ -L "$LOCAL_DIR" ]]; then
+    LINK_TARGET="$(readlink "$LOCAL_DIR")"
+    echo "" >&2
+    echo -e "\033[0;31m✗ Local skill directory is a symlink: $LOCAL_DIR\033[0m" >&2
+    echo "  → $LINK_TARGET" >&2
+    echo "" >&2
+    echo "smart_update is for COPIED installs. Symlinked installs are updated by:" >&2
+    echo "  cd <aris-repo> && git pull" >&2
+    echo "" >&2
+    echo "If you need per-project customization, switch to a copied install:" >&2
+    echo "  rm $LOCAL_DIR" >&2
+    echo "  bash tools/smart_update.sh --project <project> --target-subdir $TARGET_SUBDIR --apply" >&2
+    exit 2
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -314,7 +357,11 @@ if $APPLY; then
 else
     case "$MODE" in
         project)
-            CMD_HINT="bash tools/smart_update.sh --project \"$PROJECT_ROOT\" --apply"
+            if [[ "$TARGET_SUBDIR" == ".claude/skills" ]]; then
+                CMD_HINT="bash tools/smart_update.sh --project \"$PROJECT_ROOT\" --apply"
+            else
+                CMD_HINT="bash tools/smart_update.sh --project \"$PROJECT_ROOT\" --target-subdir \"$TARGET_SUBDIR\" --apply"
+            fi
             ;;
         explicit)
             CMD_HINT="bash tools/smart_update.sh --upstream \"$UPSTREAM_DIR\" --local \"$LOCAL_DIR\" --apply"
