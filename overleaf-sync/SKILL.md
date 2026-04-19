@@ -43,38 +43,33 @@ The `paper-overleaf/` directory is a **git clone of the Overleaf project**. The 
 
 ### `setup <project-id>` — one-time
 
-Sets up the bridge for a new Overleaf project. **Most of this is run by the user, not the agent**, because of the token.
+Sets up the bridge for a new Overleaf project. **The user runs this in their own terminal, never through the agent.** The skill ships with a hardened setup script that:
 
-The agent prints these instructions and waits for the user to confirm. **Do not paste the token into chat** — the user runs the clone in a terminal where stdin is hidden.
+1. Refuses to run unless stdin/stdout are a TTY (won't run inside an agent harness)
+2. Reads the token from a hidden prompt (no chat history, no shell history)
+3. Strips the token from the remote URL immediately after cloning
+4. Primes the OS keychain so subsequent agent operations are auth-free
+5. **Auto-installs a `pre-commit` hook in `paper-overleaf/.git/hooks/` that refuses to commit any blob containing the token pattern `olp_[A-Za-z0-9]{20,}`** — a hard technical block, not a behavioral rule
 
-```bash
-# 1. User: get a token from https://www.overleaf.com/user/settings → Git Integration → Create Token
-# 2. User runs (in their terminal, NOT through the agent):
+The agent's only role here is to print the user instruction:
 
-cd <repo-root>  # e.g., ~/Desktop/aris_paper_discussion
-read -s -p "Overleaf token: " OL_TOKEN && echo
-git clone "https://git:${OL_TOKEN}@git.overleaf.com/<PROJECT_ID>" paper-overleaf
-unset OL_TOKEN
+```
+Run this in your own terminal (NOT through me):
 
-# 3. User strips the token from the remote URL and primes the keychain:
-cd paper-overleaf
-git remote set-url origin "https://git.overleaf.com/<PROJECT_ID>"
-git config --global credential.helper osxkeychain   # macOS; use 'manager' on Windows
-git config user.email "<your-email>"
-git config user.name  "<your-name>"
+    bash <ARIS_REPO>/tools/overleaf_setup.sh <project-id-or-url>
 
-# 4. First push triggers a Keychain prompt (username = git, password = paste token).
-#    From then on, the agent's pull/push runs auth-free.
-
-# 5. User tells the agent: "setup done"
+When it finishes, tell me "setup done" and I'll verify.
 ```
 
-After the user reports "setup done", the agent verifies:
+After the user reports "setup done", the agent verifies (token-free):
 
 ```bash
-cd paper-overleaf && git remote -v          # should show URL WITHOUT token
-git config --get credential.helper          # should be osxkeychain (macOS)
-git fetch && git log --oneline -3           # should succeed without prompting
+cd paper-overleaf
+git remote -v                    # must show URL WITHOUT token
+git config --get credential.helper
+git fetch && git log --oneline -3   # must succeed without prompting
+ls .git/hooks/pre-commit         # must exist
+bash <ARIS_REPO>/tools/overleaf_audit.sh .   # must report "Audit clean"
 ```
 
 If `paper-overleaf/` exists but is empty (new Overleaf project), the agent then mirrors local `paper/` into it (see `push` workflow).
@@ -183,12 +178,24 @@ If `git pull --ff-only` fails because of true divergence:
 3. Show the user `git log origin/master ^HEAD` (their Overleaf commits) and `git log HEAD ^origin/master` (local ARIS commits).
 4. Ask the user which side to take per file, or to manually merge in Overleaf and then re-pull.
 
-## Token Security — Hard Rules
+## Token Security — Defense in Depth
 
-- **Never** ask the user to paste a token into chat. If they do anyway: (a) acknowledge it, (b) tell them to revoke it at https://www.overleaf.com/user/settings, (c) proceed with the existing keychain credential if available.
-- **Never** write a token to a file (`.env`, `.netrc`, `tools/*.sh`, etc.) committed to the ARIS repo or any project repo.
-- **Never** include a token in a `git remote -v` URL — strip it after the initial clone.
-- The agent's pull/push commands rely on the OS keychain having been primed during `setup`. If `git push` fails with `401 Unauthorized`, do **not** try to recover by asking for the token; tell the user the keychain entry expired and to redo step 4 of `setup`.
+Behavioral rules alone are not enough — the next agent reading this skill might forget them. The skill therefore relies on **technical guards** that hold even if the agent misbehaves:
+
+| Layer | Guard | Where enforced |
+|-------|-------|---------------|
+| 1. Setup | `overleaf_setup.sh` refuses to run without an interactive TTY (agents don't have one) | `tools/overleaf_setup.sh` |
+| 2. Input | Token is read by `read -s` (hidden prompt, no shell history, never enters chat) | `tools/overleaf_setup.sh` |
+| 3. Storage | Token goes straight into OS keychain via `git credential approve`; remote URL is stripped to a token-free form | `tools/overleaf_setup.sh` |
+| 4. Commits | `paper-overleaf/.git/hooks/pre-commit` greps staged content for `olp_[A-Za-z0-9]{20,}` and aborts | auto-installed by setup script |
+| 5. Audit | `overleaf_audit.sh` scans working tree, remote URLs, git history, credential files | `tools/overleaf_audit.sh` |
+
+Behavioral rules (still apply, but secondary):
+
+- **Never** ask the user to paste a token into chat. If they do anyway: (a) acknowledge it, (b) tell them to revoke it at https://www.overleaf.com/user/settings, (c) recover via keychain if already primed.
+- **Never** write a token to a file (`.env`, `.netrc`, `tools/*.sh`, etc.) committed to any repo.
+- **Never** include a token in a `git remote -v` URL — strip it after clone.
+- On `401 Unauthorized` from push/pull, tell the user the keychain entry expired and to re-run `overleaf_setup.sh`. Do **not** ask for a fresh token.
 
 ## Mutual-Exclusion Rule
 
