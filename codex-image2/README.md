@@ -8,7 +8,7 @@ This bridge is intentionally narrow:
 - it accepts **text prompts**
 - it waits for a native `imageGeneration` event from Codex
 - it rejects runs that fall back to shell/Python-based image creation
-- it copies the generated image into your requested workspace path
+- it copies the generated image only into `cwd/figures/ai_generated/`
 
 ## Requirements
 
@@ -28,9 +28,11 @@ claude mcp add codex-image2 -s user -- python3 ~/.claude/mcp-servers/codex-image
 
 ## Exposed Tools
 
-- `generate`
 - `generate_start`
 - `generate_status`
+
+The bridge is intentionally **async-first**. Call `generate_start`, then poll
+`generate_status`.
 
 ## Smoke Test
 
@@ -48,8 +50,16 @@ Generate a clean blue circle on white background.
 
 Then poll `mcp__codex-image2__generate_status` until `done=true`.
 
+`outputPath` must stay under `figures/ai_generated/` inside the provided `cwd`.
+The server rejects writes outside that workspace root.
+
 ## Current Limitations
 
 - The bridge uses the current Codex app-server path and is **experimental**
 - It is optimized for **one-shot generation** rather than conversational thread replay
 - Reference images are passed as path hints in the prompt; if Codex exposes local image viewing in that session, it may inspect them
+
+## Logging
+
+- Debug logging is opt-in via `CODEX_IMAGE2_DEBUG_LOG=/path/to/debug.log`
+- Raw Codex stdout/stderr run logs are off by default; enable only when needed with `CODEX_IMAGE2_SAVE_RUN_LOGS=1`

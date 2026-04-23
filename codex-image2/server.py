@@ -18,7 +18,7 @@ import sys
 import time
 import traceback
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,10 +29,19 @@ sys.stdin = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
 SERVER_NAME = os.environ.get("CODEX_IMAGE2_SERVER_NAME", "codex-image2")
 CODEX_BIN = os.environ.get("CODEX_IMAGE2_CODEX_BIN", "codex")
 DEFAULT_TIMEOUT_SEC = int(os.environ.get("CODEX_IMAGE2_TIMEOUT_SEC", "600"))
-DEFAULT_MODEL = os.environ.get("CODEX_IMAGE2_MODEL", "")
-DEBUG_LOG = Path(
-    os.environ.get("CODEX_IMAGE2_DEBUG_LOG", f"/tmp/{SERVER_NAME}-mcp-debug.log")
+DEFAULT_JOB_EXPIRY_GRACE_SEC = int(
+    os.environ.get("CODEX_IMAGE2_JOB_EXPIRY_GRACE_SEC", "60")
 )
+MAX_STATUS_WAIT_SEC = int(os.environ.get("CODEX_IMAGE2_MAX_STATUS_WAIT_SEC", "30"))
+DEFAULT_MODEL = os.environ.get("CODEX_IMAGE2_MODEL", "")
+DEBUG_LOG_RAW = os.environ.get("CODEX_IMAGE2_DEBUG_LOG", "").strip()
+DEBUG_LOG = Path(DEBUG_LOG_RAW).expanduser() if DEBUG_LOG_RAW else None
+SAVE_RUN_LOGS = os.environ.get("CODEX_IMAGE2_SAVE_RUN_LOGS", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 STATE_DIR = Path(
     os.environ.get(
         "CODEX_IMAGE2_STATE_DIR",
@@ -43,10 +52,13 @@ JOBS_DIR = STATE_DIR / "jobs"
 RUNS_DIR = STATE_DIR / "runs"
 
 TERMINAL_JOB_STATES = {"completed", "failed"}
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _use_ndjson = False
 
 
 def debug_log(message: str) -> None:
+    if DEBUG_LOG is None:
+        return
     try:
         DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
         with DEBUG_LOG.open("a", encoding="utf-8") as fh:
@@ -109,6 +121,21 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def parse_utc_timestamp(raw_value: Any) -> datetime | None:
+    if not isinstance(raw_value, str) or not raw_value:
+        return None
+    try:
+        return datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def utc_after_seconds(seconds: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "Z")
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_suffix(path.suffix + ".tmp")
@@ -124,14 +151,22 @@ def job_state_path(job_id: str) -> Path:
     return JOBS_DIR / f"{job_id}.json"
 
 
-def is_pid_alive(pid: int | None) -> bool:
+def classify_worker_state(pid: int | None) -> str:
     if not pid or pid <= 0:
-        return False
+        return "missing"
     try:
-        os.kill(pid, 0)
+        waited_pid, _ = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return "exited"
+        return "running"
     except OSError:
-        return False
-    return True
+        return "exited"
+    if waited_pid == 0:
+        return "running"
+    return "exited"
 
 
 def find_codex_bin() -> str | None:
@@ -183,6 +218,66 @@ def resolve_output_path(raw_output_path: str | None, *, cwd: Path, job_id: str) 
     else:
         path = cwd / "figures" / "ai_generated" / f"codex-image2-{job_id}.png"
     return path.resolve()
+
+
+def allowed_output_root(*, cwd: Path) -> Path:
+    return (cwd / "figures" / "ai_generated").resolve()
+
+
+def validate_output_path(output_path: Path, *, cwd: Path) -> str | None:
+    root = allowed_output_root(cwd=cwd)
+    try:
+        output_path.relative_to(root)
+    except ValueError:
+        return f"outputPath must stay under {root}"
+    if output_path == root:
+        return f"outputPath must be a file under {root}, not the directory itself"
+    return None
+
+
+def parse_timeout_seconds(raw_value: Any) -> tuple[int | None, str | None]:
+    if raw_value is None:
+        return DEFAULT_TIMEOUT_SEC, None
+    try:
+        timeout_sec = int(raw_value)
+    except (TypeError, ValueError):
+        return None, "timeoutSeconds must be an integer"
+    if timeout_sec <= 0:
+        return None, "timeoutSeconds must be positive"
+    return timeout_sec, None
+
+
+def is_png_bytes(raw_bytes: bytes) -> bool:
+    return raw_bytes.startswith(PNG_SIGNATURE)
+
+
+def maybe_run_log_path(run_id: str) -> Path | None:
+    if not SAVE_RUN_LOGS:
+        return None
+    return RUNS_DIR / f"{run_id}.log"
+
+
+def scrub_job_request(job: dict[str, Any]) -> None:
+    request = job.get("request")
+    if not isinstance(request, dict):
+        return
+    job["request"] = {
+        "cwd": request.get("cwd"),
+        "outputPath": request.get("outputPath"),
+        "timeoutSec": request.get("timeoutSec"),
+    }
+
+
+def fail_job(job_path: Path, job: dict[str, Any], message: str) -> dict[str, Any]:
+    finished_at = utc_now()
+    job["status"] = "failed"
+    job["error"] = message
+    job["completedAt"] = finished_at
+    job["updatedAt"] = finished_at
+    job["result"] = None
+    scrub_job_request(job)
+    write_json(job_path, job)
+    return job
 
 
 def build_bridge_prompt(
@@ -297,6 +392,9 @@ def materialize_generated_image(
     if isinstance(saved_path_value, str) and saved_path_value:
         source_path = Path(saved_path_value).expanduser()
         if source_path.is_file():
+            source_bytes = source_path.read_bytes()
+            if not is_png_bytes(source_bytes):
+                return None, None, None, "imageGeneration savedPath did not contain a PNG image"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source_path, output_path)
             return output_path, str(source_path), revised_prompt_text, None
@@ -307,6 +405,8 @@ def materialize_generated_image(
             decoded = base64.b64decode(raw_result)
         except ValueError as exc:
             return None, None, None, f"imageGeneration result was not valid base64: {exc}"
+        if not is_png_bytes(decoded):
+            return None, None, None, "imageGeneration result did not decode to a PNG image"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(decoded)
         return output_path, None, revised_prompt_text, None
@@ -328,6 +428,11 @@ def run_codex_image(
     bin_path = find_codex_bin()
     if not bin_path:
         return None, f"Codex CLI not found: {CODEX_BIN}"
+
+    output_path = output_path.resolve()
+    output_path_error = validate_output_path(output_path, cwd=cwd)
+    if output_path_error:
+        return None, output_path_error
 
     normalized_refs = reference_image_paths or []
     prompt_text = build_bridge_prompt(
@@ -441,6 +546,7 @@ def serialize_job(job: dict[str, Any]) -> dict[str, Any]:
         "startedAt": job.get("startedAt"),
         "completedAt": job.get("completedAt"),
         "updatedAt": job.get("updatedAt"),
+        "expiresAt": job.get("expiresAt"),
         "resumeHint": "Call generate_status with this jobId until done=true.",
     }
 
@@ -453,6 +559,7 @@ def start_async_generate(
     system: str | None = None,
     model: str | None = None,
     reference_image_paths: Any = None,
+    timeout_seconds: Any = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     resolved_cwd, cwd_error = resolve_cwd(cwd)
     if cwd_error:
@@ -462,8 +569,15 @@ def start_async_generate(
     if refs_error:
         return None, refs_error
 
+    timeout_sec, timeout_error = parse_timeout_seconds(timeout_seconds)
+    if timeout_error:
+        return None, timeout_error
+
     job_id = uuid.uuid4().hex
     resolved_output_path = resolve_output_path(output_path, cwd=resolved_cwd, job_id=job_id)
+    output_path_error = validate_output_path(resolved_output_path, cwd=resolved_cwd)
+    if output_path_error:
+        return None, output_path_error
     created_at = utc_now()
     job = {
         "jobId": job_id,
@@ -472,6 +586,7 @@ def start_async_generate(
         "startedAt": None,
         "completedAt": None,
         "updatedAt": created_at,
+        "expiresAt": utc_after_seconds(timeout_sec + DEFAULT_JOB_EXPIRY_GRACE_SEC),
         "error": None,
         "result": None,
         "workerPid": None,
@@ -482,6 +597,7 @@ def start_async_generate(
             "system": system,
             "model": model,
             "referenceImagePaths": refs,
+            "timeoutSec": timeout_sec,
         },
     }
 
@@ -520,12 +636,14 @@ def get_generate_status(job_id: str, *, wait_seconds: int = 0) -> tuple[dict[str
     deadline = time.monotonic() + max(wait_seconds, 0)
     while True:
         job = read_json(job_path)
-        if job.get("status") in {"queued", "running"} and not is_pid_alive(job.get("workerPid")):
-            job["status"] = "failed"
-            job["error"] = "Background image worker exited before writing a final result"
-            job["completedAt"] = utc_now()
-            job["updatedAt"] = job["completedAt"]
-            write_json(job_path, job)
+        if job.get("status") in {"queued", "running"}:
+            expires_at = parse_utc_timestamp(job.get("expiresAt"))
+            if expires_at is not None and datetime.now(timezone.utc) > expires_at:
+                job = fail_job(job_path, job, "Background image worker exceeded its deadline before writing a final result")
+            else:
+                worker_state = classify_worker_state(job.get("workerPid"))
+                if worker_state in {"missing", "exited"}:
+                    job = fail_job(job_path, job, "Background image worker exited before writing a final result")
         if job.get("status") in TERMINAL_JOB_STATES:
             return serialize_job(job), None
         if time.monotonic() >= deadline:
@@ -548,7 +666,7 @@ def run_async_job(job_id: str) -> int:
     debug_log(f"JOB_RUNNING job_id={job_id} worker_pid={os.getpid()}")
 
     request = job.get("request") or {}
-    run_log_path = RUNS_DIR / f"{job_id}.log"
+    run_log_path = maybe_run_log_path(job_id)
     try:
         payload, error = run_codex_image(
             str(request.get("prompt", "")),
@@ -557,6 +675,7 @@ def run_async_job(job_id: str) -> int:
             system=request.get("system"),
             model=request.get("model"),
             reference_image_paths=request.get("referenceImagePaths") or [],
+            timeout_sec=request.get("timeoutSec"),
             run_log_path=run_log_path,
         )
     except Exception as exc:
@@ -569,16 +688,14 @@ def run_async_job(job_id: str) -> int:
     job["updatedAt"] = finished_at
     job["completedAt"] = finished_at
     if error:
-        job["status"] = "failed"
-        job["error"] = error
-        job["result"] = None
-        write_json(job_path, job)
+        fail_job(job_path, job, error)
         debug_log(f"JOB_FAILED job_id={job_id} error={error}")
         return 1
 
     job["status"] = "completed"
     job["error"] = None
     job["result"] = payload
+    scrub_job_request(job)
     write_json(job_path, job)
     debug_log(f"JOB_COMPLETED job_id={job_id} output={(payload or {}).get('outputPath')}")
     return 0
@@ -609,7 +726,9 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
     request_id = request.get("id")
     method = request.get("method", "")
     params = request.get("params", {})
-    debug_log(f"REQUEST id={request_id!r} method={method} params={json.dumps(params, ensure_ascii=False)}")
+    if DEBUG_LOG is not None:
+        param_keys = sorted(params.keys()) if isinstance(params, dict) else []
+        debug_log(f"REQUEST id={request_id!r} method={method} param_keys={param_keys}")
 
     if request_id is None:
         if method in {"notifications/initialized", "initialized"}:
@@ -646,28 +765,6 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
             "result": {
                 "tools": [
                     {
-                        "name": "generate",
-                        "description": "Generate a raster image through the local Codex app-server native image tool and return the copied output path.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "prompt": {"type": "string", "description": "Image generation prompt"},
-                                "cwd": {"type": "string", "description": "Optional working directory"},
-                                "outputPath": {"type": "string", "description": "Optional output file path; defaults to figures/ai_generated"},
-                                "system": {"type": "string", "description": "Optional extra bridge instructions"},
-                                "model": {"type": "string", "description": "Optional Codex text model override"},
-                                "referenceImagePaths": {
-                                    "oneOf": [
-                                        {"type": "string"},
-                                        {"type": "array", "items": {"type": "string"}},
-                                    ],
-                                    "description": "Optional local reference image paths that Codex may inspect before generating",
-                                },
-                            },
-                            "required": ["prompt"],
-                        },
-                    },
-                    {
                         "name": "generate_start",
                         "description": "Start a background native image generation job through the Codex app-server.",
                         "inputSchema": {
@@ -685,6 +782,10 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                                     ],
                                     "description": "Optional local reference image paths that Codex may inspect before generating",
                                 },
+                                "timeoutSeconds": {
+                                    "type": "integer",
+                                    "description": "Optional positive timeout for the underlying Codex image call",
+                                },
                             },
                             "required": ["prompt"],
                         },
@@ -697,7 +798,10 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                             "properties": {
                                 "jobId": {"type": "string", "description": "Background image job id"},
                                 "job_id": {"type": "string", "description": "Alias of jobId"},
-                                "waitSeconds": {"type": "integer", "description": "Optional bounded wait before returning status"},
+                                "waitSeconds": {
+                                    "type": "integer",
+                                    "description": "Optional bounded wait before returning status; capped to keep the MCP server responsive",
+                                },
                             },
                             "required": ["jobId"],
                         },
@@ -712,31 +816,6 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(args, dict):
             return tool_error(request_id, "tool arguments must be an object")
 
-        if name == "generate":
-            prompt = str(args.get("prompt", "")).strip()
-            if not prompt:
-                return tool_error(request_id, "prompt is required")
-            resolved_cwd, cwd_error = resolve_cwd(args.get("cwd"))
-            if cwd_error:
-                return tool_error(request_id, cwd_error)
-            refs, refs_error = normalize_string_list(args.get("referenceImagePaths"))
-            if refs_error:
-                return tool_error(request_id, refs_error)
-            output_path = resolve_output_path(args.get("outputPath"), cwd=resolved_cwd, job_id=uuid.uuid4().hex)
-            run_log_path = RUNS_DIR / f"sync-{uuid.uuid4().hex}.log"
-            payload, error = run_codex_image(
-                prompt,
-                cwd=resolved_cwd,
-                output_path=output_path,
-                system=args.get("system"),
-                model=args.get("model"),
-                reference_image_paths=refs,
-                run_log_path=run_log_path,
-            )
-            if error:
-                return tool_error(request_id, error)
-            return tool_success(request_id, payload or {})
-
         if name == "generate_start":
             prompt = str(args.get("prompt", "")).strip()
             if not prompt:
@@ -748,6 +827,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                 system=args.get("system"),
                 model=args.get("model"),
                 reference_image_paths=args.get("referenceImagePaths"),
+                timeout_seconds=args.get("timeoutSeconds"),
             )
             if error:
                 return tool_error(request_id, error)
@@ -762,7 +842,8 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                 wait_seconds = int(wait_seconds)
             except (TypeError, ValueError):
                 wait_seconds = 0
-            payload, error = get_generate_status(str(job_id), wait_seconds=max(wait_seconds, 0))
+            wait_seconds = min(max(wait_seconds, 0), MAX_STATUS_WAIT_SEC)
+            payload, error = get_generate_status(str(job_id), wait_seconds=wait_seconds)
             if error:
                 return tool_error(request_id, error)
             return tool_success(request_id, payload or {})
