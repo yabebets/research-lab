@@ -74,6 +74,7 @@ and a **local Codex app-server MCP bridge** as the raster renderer.
 - **OUTPUT_DIR = `figures/ai_generated/`** — Output directory
 - **TEXT_LANGUAGE = `English`** — Default figure text language unless the user requests otherwise
 - **NATIVE_IMAGE_REQUIREMENT = `strict`** — Accept only native `imageGeneration` output; reject shell/Python fallbacks
+- **CANONICAL_HELPER = `python3 tools/paper_illustration_image2.py`** — Preflight, finalize, verify, and repair path for this integration
 
 ## CVPR/ICLR/NeurIPS Top-Tier Conference Style Guide
 
@@ -147,13 +148,32 @@ and a **local Codex app-server MCP bridge** as the raster renderer.
 
 ### Step 0: Pre-flight Check
 
+Render this checklist explicitly before starting:
+
+```text
+📋 paper-illustration-image2 integration checklist:
+   [ ] 1. python3 tools/paper_illustration_image2.py preflight --workspace <cwd> --json-out figures/ai_generated/preflight.json
+   [ ] 2. Confirm preflight JSON says ok=true before rendering
+   [ ] 3. Render via mcp__codex-image2__generate_start + generate_status
+   [ ] 4. Finalize via python3 tools/paper_illustration_image2.py finalize --workspace <cwd> --best-image <best_png>
+   [ ] 5. Verify artifacts via python3 tools/paper_illustration_image2.py verify --workspace <cwd> --json-out figures/ai_generated/verify.json
+```
+
 1. Create `figures/ai_generated/` if it does not exist.
 2. Confirm the request is suitable for a raster illustration:
    - architecture diagram
    - conceptual method figure
    - workflow illustration
 3. Prefer **English figure text** unless the user asked otherwise.
-4. If the `codex-image2` MCP bridge is unavailable, stop and say so clearly.
+4. Run:
+
+```bash
+python3 tools/paper_illustration_image2.py preflight \
+  --workspace <cwd> \
+  --json-out figures/ai_generated/preflight.json
+```
+
+5. If preflight is not `ok=true`, stop and say so clearly.
 
 ## Step 1: Claude Plans the Figure
 
@@ -213,6 +233,7 @@ Call `mcp__codex-image2__generate_start` with:
 - `cwd`: current project root or paper workspace
 - `outputPath`: `figures/ai_generated/figure_v1.png`
 - `system`: a short instruction like `Academic paper figure. Prefer crisp English labels.`
+- `timeoutSeconds`: a bounded render timeout such as `180`
 
 Then call `mcp__codex-image2__generate_status` with bounded waits until:
 
@@ -247,13 +268,26 @@ Keep refinement feedback concrete:
 - `Make the off-target branch thinner and secondary`
 - `Use cleaner English labels: "Candidate sgRNA library", not "sgRNA library 23 bp"`
 
-## Step 7: Finalize
+## Step 7: Finalize And Verify
 
 When accepted:
 
-- copy or reuse the best generated file as `figures/ai_generated/figure_final.png`
-- write `figures/ai_generated/latex_include.tex`
-- write `figures/ai_generated/review_log.json`
+- run the canonical helper to promote the best image to `figure_final.png`
+- let the helper write `latex_include.tex`
+- let the helper write `review_log.json`
+- run helper verification before claiming success
+
+```bash
+python3 tools/paper_illustration_image2.py finalize \
+  --workspace <cwd> \
+  --best-image figures/ai_generated/figure_vN.png \
+  --score 9 \
+  --review-summary "Accepted after strict review; labels and arrows are paper-ready."
+
+python3 tools/paper_illustration_image2.py verify \
+  --workspace <cwd> \
+  --json-out figures/ai_generated/verify.json
+```
 
 Suggested LaTeX:
 
@@ -279,25 +313,45 @@ Suggested LaTeX:
 9. Use specific, actionable refinement feedback instead of vague comments.
 10. Review arrow direction, label clarity, and visual hierarchy every round.
 11. Accept only figures that look paper-ready, not slide-ready.
+12. Always use `tools/paper_illustration_image2.py finalize` to emit the final artifacts.
+13. Always use `tools/paper_illustration_image2.py verify` before claiming success.
+
+## Repair Path
+
+If rendering succeeded but final artifacts were skipped, repair the integration explicitly:
+
+```bash
+python3 tools/paper_illustration_image2.py finalize \
+  --workspace <cwd> \
+  --best-image figures/ai_generated/figure_vN.png
+
+python3 tools/paper_illustration_image2.py verify \
+  --workspace <cwd> \
+  --json-out figures/ai_generated/verify.json
+```
 
 ## Output Structure
 
 ```text
 figures/ai_generated/
+├── preflight.json         # Helper preflight receipt
 ├── figure_v1.png          # Iteration 1
 ├── figure_v2.png          # Iteration 2
 ├── figure_v3.png          # Iteration 3
 ├── figure_final.png       # Accepted version (copy of best, score ≥ 9)
 ├── latex_include.tex      # LaTeX snippet
-└── review_log.json        # Review notes and refinement history
+├── review_log.json        # Review notes and refinement history
+└── verify.json            # Helper verification diagnostic
 ```
 
 ## Model Summary
 
 | Stage | Agent / Tool | Purpose |
 |-------|--------------|---------|
+| Step 0 | `python3 tools/paper_illustration_image2.py preflight` | Observable activation predicate and preflight receipt |
 | Step 1 | Claude | Parse request and create the initial figure prompt |
 | Step 2 | Claude (+ optional Codex critique) | Refine layout, grouping, spacing, and arrow routing |
 | Step 3 | Claude (+ optional Codex critique) | Verify academic visual style before rendering |
 | Step 4 | `mcp__codex-image2__generate_start` + `generate_status` | Native raster image generation through Codex app-server |
 | Step 5 | Claude | Strict visual review and scoring |
+| Step 7 | `python3 tools/paper_illustration_image2.py finalize` + `verify` | Emit canonical artifacts and external verification receipt |
