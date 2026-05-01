@@ -521,7 +521,7 @@ If the augmented Phase 1 call fails so badly that the normal proof review cannot
 - **Claude analyzes, Codex reviews**: Claude reads proof, formulates questions, implements fixes. Codex provides adversarial review.
 - **Codex reasoning always xhigh**: Never downgrade.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
-- **Preserve threadId**: Use `codex-reply` for follow-up rounds.
+- **Preserve threadId within a single run**: Use `codex-reply` for Phase 3 follow-up rounds within the same top-level `/proof-checker` invocation, so the reviewer keeps prior-issue context when judging whether a fix closed the gap. Across separate top-level invocations, always start a fresh thread (see "Thread independence" below).
 
 ### Fix quality
 - **Minimal fixes**: Fix exactly what's broken, nothing more.
@@ -690,11 +690,9 @@ must carry an explicit justification in `summary` + `details.issues`.
 
 ### Thread independence
 
-Every invocation uses a fresh `mcp__codex__codex` thread. Never
-`codex-reply` across proof-checker runs. Do not accept prior audit outputs
-(PAPER_CLAIM_AUDIT, CITATION_AUDIT, EXPERIMENT_LOG) as input — the fresh
-thread preserves reviewer independence per
-`shared-references/reviewer-independence.md`.
+Every **top-level** `/proof-checker` invocation starts a fresh `mcp__codex__codex` thread; do not reuse a saved threadId across separate invocations of this skill. Within a single top-level invocation, `codex-reply` is the correct primitive to thread the Phase 3 follow-up rounds — the reviewer needs prior-issue context to judge whether a fix actually closed the gap, and the Phase 1→3 flow above explicitly relies on this. The Phase 3.5 "Independent second review for FATAL/CRITICAL fixes" sub-step is the deliberate exception inside a single run: it must spawn a fresh thread so the blind reviewer has no exposure to the original critique.
+
+Do not accept prior audit outputs (PAPER_CLAIM_AUDIT, CITATION_AUDIT, EXPERIMENT_LOG) as input across separate invocations — the cross-run freshness is what preserves reviewer independence per `shared-references/reviewer-independence.md`.
 
 This skill never blocks by itself; `paper-writing` Phase 6 plus the
 verifier decide whether the verdict blocks finalization based on the
