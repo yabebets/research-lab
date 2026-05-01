@@ -271,8 +271,11 @@ If the user passed `--deep-fix` on invocation, append the following block to the
 
     Be precise. The executor will apply this plan literally; vague
     prose ("strengthen the bound", "redo the Schur step") is not
-    acceptable in deep-fix mode and should be flagged as
-    UNCLEAR_DEEP_FIX rather than emitted.
+    acceptable in deep-fix mode. If you cannot produce a precise plan
+    for an issue, omit that issue's deep-fix block and signal the
+    deep-fix path is unavailable — do NOT emit a vague plan, and do
+    NOT add a deep-fix-only category (e.g. UNCLEAR_DEEP_FIX) into the
+    standard issue list, since that contaminates default-call output.
 ```
 
 **Save the threadId.** Parse into structured issue list. Write to `PROOF_AUDIT.md`.
@@ -445,8 +448,16 @@ The default `minimal_fix` prose is intentionally short — it suits the common c
 - Algebra-heavy proofs with Schur / quadratic-form / operator-norm steps where the reviewer's first pass has consistently produced under-specified fixes.
 
 ### Failure modes
-- If the reviewer cannot produce a repair-grade plan (e.g., the fix requires choices the reviewer is unwilling to make), it MUST emit an issue with `category: UNCLEAR_DEEP_FIX` rather than fabricate a plan. The skill treats this as advisory; it does not flip the top-level verdict.
-- If `--deep-fix` is set but the Phase 1 reviewer call fails to return well-formed deep-fix output (truncation, malformed JSON), emit `details.deep_fix_plans: []` plus `details.deep_fix_status: "unavailable"` with a one-line note. Verifier gates MUST treat `unavailable` identically to the field being absent: not blocking. The cited-entry audit and the standard issue list still proceed normally.
+
+A deep-fix-only failure must never contaminate the default proof-check output. All of the following paths emit `details.deep_fix_status: "unavailable"` + `details.deep_fix_plans: []` (with a one-line note in `details.deep_fix_note`) and leave the standard issue list, top-level verdict, reason_code, and summary unchanged:
+
+- The reviewer refuses to produce a repair-grade plan because the fix would require choices the reviewer is unwilling to make.
+- The Phase 1 reviewer call returns truncated or malformed deep-fix output (parse failure on the augmented section).
+- The augmented Phase 1 call times out before producing the deep-fix block, but otherwise returned a valid normal proof review.
+
+Verifier gates MUST treat `unavailable` identically to the field being absent: not blocking. Do **not** add a `UNCLEAR_DEEP_FIX` (or any deep-fix-only) entry into `details.issues`, since `details.issues` is the default schema's issue list and adding deep-fix-specific failures to it would change default behavior for callers without the flag.
+
+If the augmented Phase 1 call fails so badly that the normal proof review cannot be recovered (e.g., the reviewer thread itself errored), retry once with the unaugmented prompt; if that also fails, fall through to the existing reviewer-failure path that maps to the top-level `ERROR` verdict.
 
 ## Key Rules
 
