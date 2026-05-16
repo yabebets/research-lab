@@ -240,9 +240,22 @@ taxonomy here first if a future helper does not fit.
 | `arxiv_fetch.py`, `semantic_scholar_fetch.py`, `deepxiv_fetch.py`, `exa_search.py`, `openalex_fetch.py` | D2 (multi-source aggregate) when SKILL queries multiple sources; D1 (cascade) when a single source suffices | Each fetcher is one paper-discovery source; SKILLs aggregate or cascade across resolved sources |
 | `extract_paper_style.py` | A when activation predicate `literal "— style-ref:" or equivalent in $ARGUMENTS` is true; not invoked otherwise | If the user asked for style transfer, missing helper means SKILL cannot satisfy the request |
 | `paper_illustration_image2.py` (`preflight`, `finalize`, `verify`) | A (skill-local gate) | Image2 finalization cannot complete without these checks; verify exits 1 on missing artifacts and that is a skill-local gate (a parent paper-writing workflow may still continue with an alternate illustration path) |
-| `figure_renderer.py` | A (skill-local gate, single-skill) | `figure-spec` cannot produce vector SVG output without the renderer |
+| `figure_renderer.py` | A (skill-local gate, single-skill) | `figure-spec` cannot produce vector SVG output without the renderer. **Phase 3.1 move**: canonical location is `skills/figure-spec/scripts/figure_renderer.py`; `tools/figure_renderer.py` retained as `os.execv` shim for legacy resolver layers. |
 | `experiment_queue/queue_manager.py`, `experiment_queue/build_manifest.py` | A (skill-local gate, single-skill) | `/experiment-queue` cannot operate without these |
 | `overleaf_audit.sh` | E (diagnostic) | Reports overleaf sync drift; surfaces gaps but does not gate the parent workflow |
+
+#### Layer 0 — self-contained owner SKILL (Arch C, Phase 3+)
+
+Single-owner helpers progressively migrate into the owning SKILL's
+`scripts/` subdirectory. When an owner SKILL invokes its own helper
+it tries the self-contained location FIRST, then falls through to
+the canonical chain so legacy users continue to work. Phase 3.1
+moved `figure_renderer.py` (canonical at
+`skills/figure-spec/scripts/figure_renderer.py`); the legacy entry
+at `tools/figure_renderer.py` is now an `os.execv` shim that
+forwards to the canonical file. Only owner SKILLs use layer 0;
+shared helpers (`research_wiki.py`, `save_trace.sh`, …) stay on
+the standard chain.
 
 #### Examples
 

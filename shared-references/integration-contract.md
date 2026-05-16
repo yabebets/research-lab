@@ -250,6 +250,48 @@ fi
 `wiki-helper-resolution.md` is the research-wiki-specific instance
 of this generic resolver, and is the precedent for everything in §2.
 
+#### Layer 0 — self-contained owner SKILL (Arch C, Phase 3+)
+
+Single-owner helpers progressively migrate into the owning SKILL's
+`scripts/` subdirectory (matching the Claude Code official skill
+layout). When an owner SKILL invokes its own helper, it tries the
+self-contained location FIRST, then falls through to the canonical
+3-layer chain so legacy users continue to work:
+
+```bash
+# Layer 0 (owner SKILL only): self-contained at $CLAUDE_SKILL_DIR/scripts/.
+HELPER=""
+if [ -n "${CLAUDE_SKILL_DIR:-}" ] && [ -f "$CLAUDE_SKILL_DIR/scripts/<helper>" ]; then
+  HELPER="$CLAUDE_SKILL_DIR/scripts/<helper>"
+fi
+# Layers 1-3: fall through to the standard chain.
+if [ -z "$HELPER" ]; then
+  # ... canonical strict-safe resolver block from above ...
+fi
+```
+
+Three properties of layer 0:
+
+1. **Single-skill only.** Only the owning SKILL uses layer 0. Cross-skill
+   helpers (`research_wiki.py` consumed by 9 SKILLs; `save_trace.sh`
+   by 14) stay on the shared-runtime chain because there is no single
+   `${CLAUDE_SKILL_DIR}` to point at.
+
+2. **CC 1.0+ feature.** `${CLAUDE_SKILL_DIR}` is set by Claude Code 1.0+;
+   on older hosts (Codex CLI, Cursor today, manual bash) it is empty
+   and layer 0 is skipped — the SKILL silently falls through to the
+   standard chain.
+
+3. **Backwards-compatible.** The canonical 3-layer chain still works
+   because Phase 3 keeps the legacy entry at `tools/<helper>` as a
+   thin `os.execv` shim that forwards to the canonical location. So
+   `.aris/tools/<helper>` (layer 1), `tools/<helper>` (layer 2), and
+   `$ARIS_REPO/tools/<helper>` (layer 3) all resolve to a working
+   Python script for any user who has not re-run `install_aris.sh`.
+
+The per-helper policy table at the end of §2 marks Phase 3 moves
+with a "Phase 3.N move" note pointing at the new canonical location.
+
 #### Per-helper policy assignments
 
 Every helper invoked from any SKILL.md (single-skill or shared
@@ -275,7 +317,7 @@ here first.
 | `arxiv_fetch.py`, `semantic_scholar_fetch.py`, `deepxiv_fetch.py`, `exa_search.py`, `openalex_fetch.py` | D2 (multi-source aggregate) when SKILL queries multiple sources (e.g. `/research-lit`); D1 (cascade) when a single source suffices | Each fetcher is one paper-discovery source; SKILLs aggregate or cascade across resolved sources and record which contributed |
 | `extract_paper_style.py` | A when activation predicate `literal "— style-ref:" or equivalent in $ARGUMENTS` is true; not invoked otherwise | If the user asked for style transfer and the helper is unresolved, the SKILL cannot satisfy the request |
 | `paper_illustration_image2.py` (`preflight`, `finalize`, `verify`) | A (skill-local gate) | Image2 finalization cannot complete without these checks; verify exits 1 on missing artifacts and that is a skill-local gate (the parent paper-writing workflow may still continue with the alternate illustration path) |
-| `figure_renderer.py` | A (skill-local gate, single-skill) | `figure-spec` cannot produce vector SVG output without the renderer |
+| `figure_renderer.py` | A (skill-local gate, single-skill) | `figure-spec` cannot produce vector SVG output without the renderer. **Phase 3.1 move**: canonical location is `skills/figure-spec/scripts/figure_renderer.py`; `tools/figure_renderer.py` retained as `os.execv` shim for legacy resolver layers. |
 | `experiment_queue/queue_manager.py`, `experiment_queue/build_manifest.py` | A (skill-local gate, single-skill) | `/experiment-queue` cannot operate without these; canonical resolver applies the same chain |
 | `overleaf_audit.sh` | E (diagnostic) | Reports overleaf sync drift; surfaces gaps but does not gate the parent workflow |
 
