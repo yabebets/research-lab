@@ -1,6 +1,6 @@
 ---
 name: paper-writing
-description: "Workflow 3: Full paper writing pipeline. Orchestrates paper-plan → paper-figure → figure-spec/paper-illustration/mermaid-diagram → paper-write → paper-compile → auto-paper-improvement-loop to go from a narrative report to a polished PDF. At `— effort: max | beast` (or explicit `— assurance: submission`), Phase 6 gates the Final Report on `tools/verify_paper_audits.sh`; the PDF is labelled `submission-ready` only when the external verifier is green. Use when user says \"写论文全流程\", \"write paper pipeline\", \"从报告到PDF\", \"paper writing\", or wants the complete paper generation workflow."
+description: "Workflow 3: Full paper writing pipeline. Orchestrates paper-plan → paper-figure → figure-spec/paper-illustration/mermaid-diagram → paper-write → paper-compile → auto-paper-improvement-loop to go from a narrative report to a polished PDF. At `— effort: max | beast` (or explicit `— assurance: submission`), Phase 6 gates the Final Report on `verify_paper_audits.sh` (resolved per integration-contract §2); the PDF is labelled `submission-ready` only when the external verifier is green. Use when user says \"写论文全流程\", \"write paper pipeline\", \"从报告到PDF\", \"paper writing\", or wants the complete paper generation workflow."
 argument-hint: "[narrative-report-path-or-topic] [— style-ref: <source>]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, Skill, mcp__codex__codex, mcp__codex__codex-reply
 ---
@@ -121,7 +121,9 @@ echo "<resolved-level>" > paper/.aris/assurance.txt   # draft or submission
   paper-claim-audit, citation-audit) are treated as load-bearing gates. Each
   sub-audit must emit its JSON artifact (PASS / WARN / FAIL / NOT_APPLICABLE /
   BLOCKED / ERROR) — never silent-skip. Phase 6 runs
-  `tools/verify_paper_audits.sh`; a non-zero exit blocks the Final Report.
+  `verify_paper_audits.sh` (canonical name; resolved per
+  [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2);
+  a non-zero exit blocks the Final Report.
 
 **Escape hatch:** a user wanting the old "beast = depth-only, no audit gate"
 can pass `— effort: beast, assurance: draft` explicitly. Legal but
@@ -132,7 +134,7 @@ discouraged for actual submissions. See
 
 ```
 📋 Assurance: <level> (derived from effort: <effort>)
-   <either "current behavior, no audit gate" OR "mandatory audits gated by tools/verify_paper_audits.sh">
+   <either "current behavior, no audit gate" OR "mandatory audits gated by verify_paper_audits.sh (resolved per integration-contract §2)">
 ```
 
 ### Phase 1: Paper Plan
@@ -532,15 +534,18 @@ skipping audits while claiming to have run them.
    [ ] 1. /proof-checker        → paper/PROOF_AUDIT.json
    [ ] 2. /paper-claim-audit    → paper/PAPER_CLAIM_AUDIT.json
    [ ] 3. /citation-audit       → paper/CITATION_AUDIT.json
-   [ ] 4. bash <ARIS_REPO>/tools/verify_paper_audits.sh paper/ --assurance submission
+   [ ] 4. Resolve $AUDIT_VERIFIER per integration-contract.md §2 (Policy A),
+          then: bash "$AUDIT_VERIFIER" paper/ --assurance submission
    [ ] 5. Block Final Report iff verifier exit code != 0
 ```
 
-> `<ARIS_REPO>` placeholder — replace with the absolute path to your ARIS
-> clone (e.g. `~/Desktop/Auto-claude-code-research-in-sleep` or the path
-> returned by `dirname $(readlink ~/.claude/skills/paper-writing/SKILL.md)/../..`).
-> The path is stable across runs; store it in a shell variable if you
-> prefer (`export ARIS_REPO=~/…` and use `"$ARIS_REPO"` in the command).
+> The resolver in "Running the verifier" below tries
+> `.aris/tools/verify_paper_audits.sh` (created by `install_aris.sh`),
+> then `tools/verify_paper_audits.sh` (in-repo run), then
+> `$ARIS_REPO/tools/verify_paper_audits.sh` (env-var-set path). The
+> chain always tries layers 1 → 2 → 3 in order; setting
+> `export ARIS_REPO=~/…` only ensures layer 3 has a valid target if
+> layers 1 and 2 are absent.
 
 #### Invoking the three audits
 
@@ -565,8 +570,29 @@ Order:
 
 #### Running the verifier
 
+Resolve `$AUDIT_VERIFIER` via the canonical strict-safe chain (see
+[`shared-references/integration-contract.md`](../shared-references/integration-contract.md)
+§2, Policy A — gate). Under `assurance: submission` the verifier is
+load-bearing: if the helper is unresolved the SKILL aborts the Final
+Report rather than producing an unverified `submission-ready` claim.
+
 ```bash
-bash <ARIS_REPO>/tools/verify_paper_audits.sh paper/ --assurance submission
+# Resolve the audit verifier (Policy A — gate).
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+AUDIT_VERIFIER=".aris/tools/verify_paper_audits.sh"
+[ -f "$AUDIT_VERIFIER" ] || AUDIT_VERIFIER="tools/verify_paper_audits.sh"
+[ -f "$AUDIT_VERIFIER" ] || { [ -n "${ARIS_REPO:-}" ] && AUDIT_VERIFIER="$ARIS_REPO/tools/verify_paper_audits.sh"; }
+[ -f "$AUDIT_VERIFIER" ] || {
+  echo "ERROR: verify_paper_audits.sh not resolved at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "       assurance=submission requires the verifier; aborting Final Report." >&2
+  echo "       Fix: rerun bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+  exit 1
+}
+
+bash "$AUDIT_VERIFIER" paper/ --assurance submission
 ```
 
 - **Exit 0** — All mandatory audits present, JSON schema-valid, hashes fresh,
