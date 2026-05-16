@@ -329,14 +329,30 @@ python3 "$SCRIPT" download ARXIV_ID --dir papers/
 
 Before analysis, run pre-search verification on **all** candidate papers
 collected from Steps 0a-1 to filter out LLM-fabricated arXiv IDs / DOIs /
-titles. Helper: `tools/verify_papers.py` (resolve via the chain
-`.aris/tools/verify_papers.py` → `tools/verify_papers.py` →
-`$ARIS_REPO/tools/verify_papers.py`, see
-[`shared-references/wiki-helper-resolution.md`](../shared-references/wiki-helper-resolution.md)).
+titles. Helper: `verify_papers.py` (canonical name; resolved per
+[`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2,
+Policy D1 — primary helper with degraded-output fallback). If the
+helper is unresolved on this machine, the SKILL emits a fallback
+`verified_papers.json` tagging every candidate `[UNVERIFIED]` so
+downstream analysis proceeds with audit-visible degraded output
+rather than silently dropping candidates.
 
 ```bash
-# 1. Emit candidates as JSON (one entry per paper, with any known identifiers)
-cat > research-wiki/candidate_papers.json <<'JSON'
+# 1. Resolve $VERIFY_PAPERS via the canonical strict-safe chain (§2).
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+VERIFY_PAPERS=".aris/tools/verify_papers.py"
+[ -f "$VERIFY_PAPERS" ] || VERIFY_PAPERS="tools/verify_papers.py"
+[ -f "$VERIFY_PAPERS" ] || { [ -n "${ARIS_REPO:-}" ] && VERIFY_PAPERS="$ARIS_REPO/tools/verify_papers.py"; }
+[ -f "$VERIFY_PAPERS" ] || VERIFY_PAPERS=""
+
+# 2. Emit candidates as JSON. Verification scratch lives under .aris/
+#    (NOT under research-wiki/ — Step 6's wiki ingest predicate is
+#    "research-wiki/ exists", and we must not trip it from Step 1.5).
+mkdir -p .aris/verify-papers
+cat > .aris/verify-papers/candidate_papers.json <<'JSON'
 [
   {"id": "p1", "arxiv_id": "2307.03172", "doi": null, "title": "Lost in the Middle"},
   {"id": "p2", "arxiv_id": null, "doi": "10.1145/...", "title": "..."},
@@ -344,12 +360,47 @@ cat > research-wiki/candidate_papers.json <<'JSON'
 ]
 JSON
 
-# 2. Run 3-layer verification (arXiv batch → CrossRef → Semantic Scholar fuzzy)
-python3 tools/verify_papers.py \
-    --input  research-wiki/candidate_papers.json \
-    --output research-wiki/verified_papers.json
+# 3. Run 3-layer verification (arXiv batch → CrossRef → Semantic Scholar fuzzy).
+#    Policy D1: when the helper is unresolved OR its invocation fails, emit
+#    a degraded verified set tagging everything [UNVERIFIED] so the user
+#    can audit search quality. If python3 itself is missing, we BLOCK
+#    rather than hand-roll JSON in shell.
+verify_ok=false
+if [ -n "$VERIFY_PAPERS" ]; then
+  if python3 "$VERIFY_PAPERS" \
+        --input  .aris/verify-papers/candidate_papers.json \
+        --output .aris/verify-papers/verified_papers.json; then
+    verify_ok=true
+  else
+    echo "WARN: verify_papers.py invocation failed (resolved at $VERIFY_PAPERS); falling back to [UNVERIFIED] tagging." >&2
+  fi
+else
+  echo "WARN: verify_papers.py not resolved at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "      Fix: rerun bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+fi
+if [ "$verify_ok" = "false" ]; then
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: python3 unavailable; cannot emit fallback verified_papers.json." >&2
+    echo "       Status: BLOCKED. Install python3 or restore the helper to proceed." >&2
+    exit 1
+  fi
+  echo "      Emitting unverified candidate set with [UNVERIFIED] tags." >&2
+  python3 - <<'PY'
+import json
+cands = json.load(open('.aris/verify-papers/candidate_papers.json'))
+out = {
+  'verdict': 'WARN',
+  'reason_code': 'verify_papers_unavailable',
+  'summary': 'verify_papers.py helper unresolved or invocation failed; all candidates tagged [UNVERIFIED] for audit visibility.',
+  'papers': [dict(p, status='unverified', method='none') for p in cands],
+}
+with open('.aris/verify-papers/verified_papers.json', 'w') as f:
+  json.dump(out, f, indent=2)
+PY
+fi
 
-# 3. Read verdict + per-paper status; surface warnings to the user
+# 4. Read verdict + per-paper status from .aris/verify-papers/verified_papers.json;
+#    surface warnings to the user.
 ```
 
 **Mandatory output rules** (see
@@ -372,12 +423,23 @@ Optional: set `ARIS_VERIFY_EMAIL=you@institution.edu` in your shell to lift
 CrossRef rate limits to the polite pool.
 
 ### Step 2: Analyze Each Paper
-For each **verified** paper (from all sources), extract:
+For **every** paper in `.aris/verify-papers/verified_papers.json`
+(verified, unverified, `verify_pending`, and `error` alike — see
+Retention rule above), extract:
 - **Problem**: What gap does it address?
 - **Method**: Core technical contribution (1-2 sentences)
 - **Results**: Key numbers/claims
 - **Relevance**: How does it relate to our work?
 - **Source**: Where we found it (Zotero/Obsidian/local/web) — helps user know what they already have vs what's new
+- **Verification status** (one of):
+  - `✅ verified (via arxiv|crossref|s2)`
+  - `⚠️ UNVERIFIED (verification unavailable: helper unresolved or invocation failed)`
+  - `⚠️ UNVERIFIED (searched: not found in any source)`
+  - `… VERIFY_PENDING (transient API failure — retry next session)`
+  - `❌ ERROR (malformed input: no arxiv, no DOI, no title)`
+
+  Show the status in the analyzed table — never silently drop a
+  paper because its status is anything other than `verified`.
 
 ### Step 3: Synthesize
 - Group papers by approach/theme
