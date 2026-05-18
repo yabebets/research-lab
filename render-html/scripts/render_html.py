@@ -581,10 +581,50 @@ def _render_blocks(
         elif t == "table":
             out.append(render_table(b["header"], b["divider"], b["rows"]))
         elif t == "html":
-            out.append(b["content"])
+            out.append(_render_html_block(b["content"]))
         else:
             out.append(f"<!-- unknown block: {html_lib.escape(t)} -->")
     return "\n".join(out), toc
+
+
+def _render_html_block(content: str) -> str:
+    """For <details>...</details> blocks, parse the inner content as Markdown.
+
+    Matches GitHub-flavored convention: when a `<details>` block has a blank
+    line separating its `<summary>` from the body, the body is parsed as
+    markdown (lists, headings, code, callouts all work). For non-<details>
+    HTML blocks, content passes through verbatim.
+    """
+    lines = content.split("\n")
+    if not lines or not lines[0].lstrip().lower().startswith("<details"):
+        return content
+    # Locate opening boundary: after </summary> if present, else after the
+    # <details> line itself.
+    open_end = 1  # default: just past the <details> line
+    summary_close_re = re.compile(r"</summary\s*>", re.IGNORECASE)
+    for j in range(1, len(lines)):
+        if summary_close_re.search(lines[j]):
+            open_end = j + 1
+            break
+        # If we hit non-summary content first, no `<summary>` block; stop scanning.
+        if lines[j].strip() and not re.match(r"\s*<summary", lines[j], re.IGNORECASE):
+            break
+    # Locate closing boundary: the last </details> line.
+    close_start = len(lines) - 1
+    close_re = re.compile(r"^\s*</details\s*>", re.IGNORECASE)
+    while close_start > 0 and not close_re.match(lines[close_start]):
+        close_start -= 1
+    if open_end >= close_start:
+        # Degenerate or empty body; emit raw.
+        return content
+    open_part = "\n".join(lines[:open_end])
+    inner_md = "\n".join(lines[open_end:close_start]).strip("\n")
+    close_part = "\n".join(lines[close_start:])
+    if not inner_md.strip():
+        return content
+    inner_blocks = parse_blocks(inner_md.split("\n"))
+    inner_html, _ = _render_blocks(inner_blocks, collect_toc=False)
+    return f"{open_part}\n{inner_html}\n{close_part}"
 
 
 def render_toc(toc: list[dict]) -> str:
