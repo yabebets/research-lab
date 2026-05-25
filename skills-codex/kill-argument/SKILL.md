@@ -49,6 +49,7 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 - **DEFENSE_DECOMPOSITION** = 3-7 atomic rejection points extracted from the attack memo.  Each gets its own classification.
 - **CLASSIFICATION** = `answered_by_current_text` / `partially_answered` / `still_unresolved`.  (Names chosen so the adjudicator does not assume "fixed" implies prior history of patching — they read the paper as a fresh reviewer would.)
 - **OUTPUT** = `KILL_ARGUMENT.md` (human-readable) + `KILL_ARGUMENT.json` (machine-readable) in the paper directory.
+- **RENDER_HTML = true** — When `true` (default), auto-render `KILL_ARGUMENT.md` to HTML after writing the report via `/render-html "<paper-dir>/KILL_ARGUMENT.md" --json "<paper-dir>/KILL_ARGUMENT.json"`. Uses **full review gate** (audit-class artifact). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: failures don't invalidate the kill-argument verdict.
 
 ## Workflow
 
@@ -355,6 +356,7 @@ To the user:
 - `<paper-dir>/KILL_ARGUMENT.json` — machine-readable ledger
 - `.aris/traces/kill-argument/<date>_runNN/` — per-thread codex traces (Attack memo + Adjudication memo)
 - Optional: applied fixes if user explicitly requests; default is **detect-only, do not auto-modify**.
+- `<paper-dir>/KILL_ARGUMENT.html` (when `RENDER_HTML = true`, default) — single-file HTML view auto-rendered via `/render-html` with the JSON sidecar. Full review gate applies. **Non-blocking**: if `/render-html` fails, the kill-argument verdict still counts as complete.
 
 ## Key Rules
 

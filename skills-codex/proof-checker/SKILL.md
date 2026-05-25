@@ -20,6 +20,7 @@ Systematically verify a mathematical proof via cross-model adversarial review, f
 - REPORT_TEX: `proof_audit_report.tex` (formal before/after PDF)
 - STATE_FILE: `PROOF_CHECK_STATE.json` (for recovery)
 - SKELETON_DOC: `PROOF_SKELETON.md` (micro-claim inventory)
+- **RENDER_HTML = true** — When `true` (default), auto-render `PROOF_AUDIT.md` to HTML at workflow end via `/render-html`. Uses **full review gate** (audit-class, math-heavy — render-fidelity check protects against MathJax breakage). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: failures don't invalidate the proof audit.
 
 ### Acceptance Gate (objective, replaces subjective scoring)
 
@@ -410,6 +411,7 @@ Write `PROOF_CHECK_STATE.json`:
 | `PROOF_AUDIT.json` | Machine-readable submission verdict (see below) | Always emitted |
 | `proof_audit_report.tex/.pdf` | Formal before/after report | Phase 4 |
 | `PROOF_CHECK_STATE.json` | State for recovery | Phase 5 |
+| `PROOF_AUDIT.html` (+ `.review.json` sidecar) | Single-file HTML view auto-rendered via `/render-html "PROOF_AUDIT.md" --json "PROOF_AUDIT.json"`. **Non-blocking** — if `/render-html` fails the audit still counts as complete. | Workflow end (when `RENDER_HTML = true`, default) |
 
 ## Submission Artifact Emission
 

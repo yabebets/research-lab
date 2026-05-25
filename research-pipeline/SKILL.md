@@ -17,6 +17,7 @@ End-to-end autonomous research workflow for: **$ARGUMENTS**
 - **REVIEWER_DIFFICULTY = medium** — How adversarial the reviewer is. `medium` (default): standard MCP review. `hard`: adds reviewer memory + debate protocol. `nightmare`: GPT reads repo directly via `codex exec` + memory + debate. Passed through to `/auto-review-loop`.
 - **AUTO_WRITE = false** — When `true`, automatically invoke Workflow 3 (`/paper-writing`) after Stage 5. Requires `VENUE` to be set. When `false` (default), Stage 5 generates `NARRATIVE_REPORT.md` and stops — user invokes `/paper-writing` manually.
 - **VENUE = ICLR** — Target venue for paper writing (Stage 6). Only used when `AUTO_WRITE=true`. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_CONF`, `IEEE_JOURNAL`.
+- **RENDER_HTML = true** — When `true` (default), auto-render `NARRATIVE_REPORT.md` to HTML at Stage 5 completion via `/render-html`. Uses `--no-review` (this is an internal handoff doc to `/paper-writing`, not a reviewer-facing final artifact — the upstream Stage 4 auto-review loop already cross-model-reviewed the claims). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: if `/render-html` fails or Codex MCP is unavailable, log the failure and continue — the HTML view is a nice-to-have, not a Stage 5 prerequisite.
 
 > 💡 Override via argument, e.g., `/research-pipeline "topic" — AUTO_PROCEED: false, human checkpoint: true, difficulty: nightmare, auto_write: true, venue: NeurIPS`.
 
@@ -225,6 +226,20 @@ When Workflow 3 finishes, update the pipeline report with:
 - Remaining issues
 
 **Output:** `paper/` directory with LaTeX source, compiled PDF, and `PAPER_IMPROVEMENT_LOG.md`.
+
+## Render HTML view (auto, when `RENDER_HTML = true`)
+
+After Stage 5 finalizes `NARRATIVE_REPORT.md` (before paper writing branches), invoke `/render-html` on the narrative report:
+
+```
+/render-html "NARRATIVE_REPORT.md" --no-review
+```
+
+`--no-review` is intentional: this is an internal handoff doc, not reviewer-facing — the claims it summarizes were already cross-model-reviewed in Stage 4's `/auto-review-loop`. Output: `NARRATIVE_REPORT.html` next to the MD, with embedded source SHA256.
+
+**Non-blocking**: if `/render-html` fails (helper missing, file write error, etc.), log the failure and continue Stage 5 — the HTML view is a convenience artifact, not a pipeline prerequisite.
+
+Skip this step if `RENDER_HTML = false`.
 
 ## Output Protocols
 

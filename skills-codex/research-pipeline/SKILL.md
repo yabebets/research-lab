@@ -15,6 +15,7 @@ End-to-end autonomous research workflow for: **$ARGUMENTS**
 - **REVIEWER_DIFFICULTY = medium** — Passed through to `/auto-review-loop`. `medium` uses Codex xhigh review; `hard` adds Reviewer Memory and Debate Protocol; `nightmare` adds direct repository-reading adversarial verification.
 - **AUTO_WRITE = false** — When `true`, automatically invoke Workflow 3 (`/paper-writing`) after Stage 5. Requires `VENUE` to be set. When `false` (default), Stage 5 generates `NARRATIVE_REPORT.md` and stops so the user can invoke `/paper-writing` manually.
 - **VENUE = ICLR** — Target venue for paper writing when `AUTO_WRITE=true`. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_CONF`, `IEEE_JOURNAL`.
+- **RENDER_HTML = true** — When `true` (default), auto-render `NARRATIVE_REPORT.md` to HTML at Stage 5 completion via `/render-html`. Uses `--no-review` (internal handoff doc to `/paper-writing`, not reviewer-facing; the claims it summarizes were already cross-model-reviewed in Stage 4's `/auto-review-loop`). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: failures are logged and ignored.
 
 > 💡 Override via argument, e.g., `/research-pipeline "topic" — AUTO_PROCEED: false, human checkpoint: true, difficulty: nightmare, auto_write: true, venue: NeurIPS`.
 
@@ -198,6 +199,16 @@ When ready, invoke:
 ```
 
 Workflow 3 handles its own phases: `/paper-plan → /paper-figure → /paper-write → /paper-compile → /auto-paper-improvement-loop`. When it finishes, update the pipeline report with final PDF path, improvement scores, and remaining issues.
+
+## Render HTML view (auto, when `RENDER_HTML = true`)
+
+After Stage 5 finalizes `NARRATIVE_REPORT.md` (before paper writing branches), invoke `/render-html`:
+
+```
+/render-html "NARRATIVE_REPORT.md" --no-review
+```
+
+`--no-review` is intentional: this is an internal handoff doc, not reviewer-facing. Output: `NARRATIVE_REPORT.html` next to the MD, with embedded source SHA256. **Non-blocking**: failures are logged and Stage 5 continues. Skip if `RENDER_HTML = false`.
 
 ## Output Protocols
 
