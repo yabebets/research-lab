@@ -7,6 +7,14 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex,
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges proof validity across rounds, threading the
+> reviewer's memory from Phase 1 → Phase 3 via `codex-reply` so the reviewer can
+> check whether a fix actually closed the gap it flagged. An external timer
+> re-enters from the top each tick, starting a fresh thread and losing that
+> memory. Schedule the *external wait that precedes it*, not the verdict. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Systematically verify a mathematical proof via cross-model adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
 
 ## Context: $ARGUMENTS

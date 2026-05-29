@@ -7,6 +7,17 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__c
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It
+> already loops internally (review → fix → recompile) with its own round
+> structure and a deliberate fresh-reviewer bias guard each round (no
+> `codex-reply`). Re-asking it to "improve the paper" on a
+> wall-clock timer produces no new signal — quality changes when the *review*
+> changes, not when the clock ticks — and a timed re-run that also accepts its
+> own output to decide when to stop crosses into self-acquittal
+> (`acceptance-gate.md`). Schedule the *external wait that precedes it*, not the
+> improvement loop. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Autonomously improve the paper at: **$ARGUMENTS**
 
 ## Context

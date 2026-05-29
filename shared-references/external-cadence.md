@@ -57,7 +57,7 @@ never for **internal semantic loops**.
 |---|---|---|
 | What it waits on | A fact in the outside world: job done, metric logged, file landed | A judgment the agent itself produces |
 | What advances it | Reality changing (GPU frees, epoch logs, PDF compiles) | A model emitting a verdict |
-| Owns its own loop? | No — without cadence a Claude session blocks on `sleep` | Yes — the skill already iterates internally with thread continuity |
+| Owns its own loop? | No — without cadence a Claude session blocks on `sleep` | Yes — the skill already iterates internally, carrying its own round-to-round state (a reviewer thread, or fed-forward summaries) |
 | Cadence replaces | A blocking session burning context on a wait | Nothing — it only re-spawns and re-judges |
 | Acceptance gate | Machine-checkable existence/completion (safe same-model) | Quality/correctness (must be cross-model) |
 
@@ -130,22 +130,39 @@ same-model"). The cadence never touches a quality/correctness verdict.
 
 Any **verdict-bearing** skill — one whose output is a judgment of
 quality, correctness, support, novelty, or satisfaction — must run on
-its own internal cadence with its own thread continuity, and must
-terminate in the cross-model jury. Never put one inside `/loop`,
-`/schedule`, or `CronCreate`:
+its own internal cadence with its own round-to-round state (a persistent
+reviewer thread, or prior-round summaries fed forward — whichever the skill
+uses), and must terminate in the cross-model jury. Never put one inside
+`/loop`, `/schedule`, or `CronCreate`:
 
-- `/auto-review-loop` — already loops internally with reviewer memory
+- `/auto-review-loop` — already loops internally; reviewer carries
+  round-to-round memory in one `threadId` (`codex-reply`)
+- `/auto-review-loop-llm`, `/auto-review-loop-minimax` — same loop, alternate
+  reviewer backend; same internal round cadence (each round's prior-round
+  summary is fed into the next prompt — a stateless per-round API call, not a
+  shared thread, but still verdict-bearing and self-iterating)
+- `/auto-paper-improvement-loop` — review → fix → recompile loop with its own
+  round structure and a fresh-reviewer bias guard each round (no `codex-reply`)
+- `/research-review` — produces a cross-model review verdict
 - `/result-to-claim` — judges whether results support a claim
 - `/experiment-audit` — judges experiment integrity
 - `/paper-claim-audit` — judges paper-to-evidence fidelity
 - `/citation-audit` — judges bibliographic correctness
-- `/peer-review` — produces a review verdict
 - `/proof-checker` — judges proof validity across rounds
 - `/kill-argument` — adversarial accept/reject verdict
 
 If you find yourself wanting to schedule one of these, the thing you
 actually want to schedule is the *external wait that precedes it* (job
 done → then audit once), not the verdict itself.
+
+> **Adjacent but distinct — `/dse-loop`.** It also loops internally, so do
+> not wrap it in external cadence either, but for a *different* reason: its
+> stop gate is an **objective machine-checkable metric** ("objective met or
+> timeout"), which is Type-A, not a quality verdict — so it is not a
+> self-acquittal hazard. The reason not to wrap it is **scheduler
+> duplication** (component #4 below), the same reason as `/experiment-queue`,
+> not the verdict fence. Its own objective gate is a safe same-model
+> self-termination (`acceptance-gate.md`).
 
 ## The affordance: natural external-wait surfaces
 

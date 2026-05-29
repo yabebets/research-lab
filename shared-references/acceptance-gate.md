@@ -178,13 +178,13 @@ writes.
 | `/citation-audit` | every entry real & in-context | B | fresh **cross-model** reviewer | ✅ cross-model |
 | `/paper-writing` Phase 6 (submission) | `verify_paper_audits.sh` exit 0 | A (gate) **wrapping** B (the audits) | external verifier reads cross-model JSON | ✅ A-gate over B-verdicts |
 
-> 📌 The `/auto-review-loop` row reflects the skill's **actual** stop logic
-> (`score >= 6` AND verdict contains "ready"/"almost"). Note the skill's
-> own `Constants` block currently states the condition with `OR`, while
-> the Phase-E stop check uses `AND` — an internal inconsistency in
-> `skills/auto-review-loop/SKILL.md` worth reconciling. Either way the
-> acquittal is **codex's** score+verdict, so the Type-B classification
-> holds regardless of which boolean wins.
+> 📌 The `/auto-review-loop` row reflects the skill's stop logic: `score >= 6`
+> AND verdict contains "ready"/"almost", evaluated each round. (Its `Constants`
+> block previously stated this with `OR` and a stale verdict vocabulary — an
+> internal inconsistency now reconciled to the `AND` form the Phase-E stop
+> check actually uses, in `auto-review-loop` and its `-llm`/`-minimax`
+> siblings.) The acquittal is **codex's** score+verdict, so the Type-B
+> classification is unchanged.
 
 Two patterns to notice:
 

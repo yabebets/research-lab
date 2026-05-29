@@ -7,6 +7,14 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex
 
 # Paper Claim Audit: Zero-Context Evidence Verification
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges paper-to-evidence fidelity with a deliberately
+> zero-context fresh reviewer. Re-firing that verdict on a wall-clock timer adds
+> no new signal (it changes only when the *paper or results* change). Schedule
+> the *external wait that precedes it* — paper draft ready → then audit
+> **once**. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Verify that every claim in the paper matches raw evidence for: **$ARGUMENTS**
 
 ## Why This Exists

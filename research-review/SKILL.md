@@ -7,6 +7,14 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__c
 
 # Research Review via External Reviewer Backend (xhigh reasoning)
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it produces a cross-model review verdict, multi-round with
+> reviewer thread continuity. An external timer re-fires the verdict on
+> wall-clock time and breaks the reviewer's round-to-round memory: zero new
+> signal, full token cost. Schedule the *external wait that precedes it* (work
+> ready → then review once), not the verdict. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Get a multi-round critical review of research work from the selected external reviewer backend with maximum reasoning depth.
 
 ## Constants

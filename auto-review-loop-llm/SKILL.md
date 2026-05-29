@@ -7,6 +7,16 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Skill
 
 # Auto Review Loop (Generic LLM): Autonomous Research Improvement
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** Like
+> `/auto-review-loop`, it already loops internally (review → fix → re-review),
+> feeding each round's prior-round summary into the next review prompt (the
+> backend is a stateless per-round API/MCP call, not a shared thread). An
+> external timer re-enters from the top each tick, dropping that accumulated
+> context and firing the verdict on wall-clock time instead of on artifact
+> change — zero new signal, full token cost. Schedule the *external wait that
+> precedes it*, not the verdict. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Autonomously iterate: review → implement fixes → re-review, until the external reviewer gives a positive assessment or MAX_ROUNDS is reached.
 
 ## Context: $ARGUMENTS
@@ -14,7 +24,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 ## Constants
 
 - MAX_ROUNDS = 4
-- POSITIVE_THRESHOLD: score >= 6/10, or verdict contains "accept", "sufficient", "ready for submission"
+- POSITIVE_THRESHOLD: score >= 6/10 **AND** verdict ∈ {"ready", "almost"} — **both** must hold, matching the operative STOP check below. Verdict vocabulary is {"ready", "almost", "not ready"}. (Earlier wording used `or` and a stale verdict set; the `AND` form is authoritative.)
 - REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
 
 ## LLM Configuration

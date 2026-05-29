@@ -7,6 +7,13 @@ allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, mcp__codex__codex, WebSea
 
 # Citation Audit
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges bibliographic correctness. Re-running that verdict
+> on a timer adds no new signal (it changes only when the *bibliography*
+> changes). Schedule the *external wait that precedes it* — bibliography
+> finalized → then audit **once**. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Verify every `\cite{...}` in a paper against three independent layers:
 
 1. **Existence** — the cited paper actually exists at the claimed arXiv ID / DOI / venue.

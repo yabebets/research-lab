@@ -7,6 +7,15 @@ allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Skill(run-experiment), Sk
 
 # Experiment Queue
 
+> ⏱ **External cadence: visibility only.** This skill already runs its own
+> detached server-side scheduler (60s poll + `depends_on` + wave transitions).
+> Use its status output for overnight visibility (N done / N running / N
+> pending); do **not** wrap it in a second `/loop` / `CronCreate` poll — that
+> duplicates the scheduler on an uncoordinated clock and races the
+> wave-transition logic it was built to prevent. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md)
+> ("don't duplicate an existing scheduler").
+
 Orchestrate large batches of ML experiments on SSH remote GPU servers with proper state tracking, OOM retry, stale cleanup, and wave transitions.
 
 ## When to Use This Skill

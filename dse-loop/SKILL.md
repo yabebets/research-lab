@@ -7,6 +7,14 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
 
 # DSE Loop: Autonomous Design Space Exploration
 
+> 🔁 **Do not wrap this skill in `/loop` / `CronCreate`.** It already loops
+> internally until its objective is met or it times out. Unlike the
+> verdict-bearing review/audit skills, its stop gate is an **objective
+> machine-checkable metric** (Type-A), so its self-termination is safe
+> same-model — the reason not to wrap it is **scheduler duplication**, not the
+> verdict fence. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Autonomously explore a design space: run → analyze → pick next parameters → repeat, until the objective is met or timeout is reached. Designed for computer architecture and EDA problems.
 
 ## Context: $ARGUMENTS
