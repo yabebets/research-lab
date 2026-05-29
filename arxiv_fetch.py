@@ -220,24 +220,33 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    def _add_search_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "query",
+            help="Search query or arXiv ID (bare ID or id:ARXIV_ID).",
+        )
+        p.add_argument(
+            "--max",
+            type=int,
+            default=10,
+            metavar="N",
+            help="Maximum number of results (default: 10).",
+        )
+        p.add_argument(
+            "--start",
+            type=int,
+            default=0,
+            help="Start offset for pagination (default: 0).",
+        )
+
     search_parser = subparsers.add_parser("search", help="Search arXiv papers")
-    search_parser.add_argument(
-        "query",
-        help="Search query or arXiv ID (bare ID or id:ARXIV_ID).",
-    )
-    search_parser.add_argument(
-        "--max",
-        type=int,
-        default=10,
-        metavar="N",
-        help="Maximum number of results (default: 10).",
-    )
-    search_parser.add_argument(
-        "--start",
-        type=int,
-        default=0,
-        help="Start offset for pagination (default: 0).",
-    )
+    _add_search_args(search_parser)
+
+    # Defensive aliases — models frequently hallucinate `get` / `fetch`
+    # instead of `search`.  Accept them silently so the invocation succeeds
+    # regardless of model quality.
+    for alias in ("get", "fetch"):
+        _add_search_args(subparsers.add_parser(alias, help="Alias for search"))
 
     download_parser = subparsers.add_parser("download", help="Download a paper PDF by arXiv ID")
     download_parser.add_argument(
@@ -263,7 +272,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
-    if args.command == "search":
+    if args.command in ("search", "get", "fetch"):
         results = search(args.query, max_results=args.max, start=args.start)
         print(json.dumps(results, ensure_ascii=False, indent=2))
         return 0
