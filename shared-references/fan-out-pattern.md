@@ -91,30 +91,54 @@ pass only generates.
 
 ## Structured-output contract for shards
 
-Every shard returns a **structured candidate set**, not prose, so the
-merge + dedup + jury steps can operate mechanically. Minimum schema per
-shard:
+Every shard returns a **structured result set**, not prose, so the merge +
+dedup + jury steps can operate mechanically. There are two envelope shapes,
+chosen by what the shard does — but they share one invariant: `shard_id` + a
+keyed list + a `dedup_key` per item.
+
+**Generation fan-out** — the shard *produces* new candidates (idea lenses,
+attack axes, draft variants). Returns `candidates[]`:
 
 ```json
 {
   "shard_id": "lens:scaling-regime",
   "candidates": [
     {
-      "id": "c1",
-      "kind": "idea | source | attack | proof_obligation | draft_section",
-      "payload": "<the candidate item itself>",
-      "provenance": "<which lens/source/seed produced it>",
+      "kind": "idea | attack | draft_section",
+      "payload": "<the produced item — domain fields may be inlined instead>",
+      "provenance": "<which lens/seed produced it>",
       "dedup_key": "<normalized string for mechanical clustering>"
     }
   ]
 }
 ```
 
-The `dedup_key` is what makes mechanical clustering possible without
-judgment: normalize titles, arXiv IDs, claim-stems, or
-obligation-statements to a canonical string, then cluster on string
-match / near-match. No model decides "are these the same idea?" by
-*taste* — the key decides by *normalization rule*.
+**Extraction fan-out** — the shard *reads* a fixed input set and reports the
+units it finds (papers in a verified set, obligations in a proof). Returns
+`entries[]` with the same per-item keys, except `dedup_key` is the unit's
+**pre-existing canonical id** (assigned upstream), not a freshly normalized
+string:
+
+```json
+{
+  "shard_id": "section:4.2",
+  "entries": [
+    {
+      "kind": "source | proof_obligation",
+      "payload": "<the extracted record — domain fields may be inlined>",
+      "dedup_key": "<canonical id already assigned upstream: arXiv id / DOI / MC-17>"
+    }
+  ]
+}
+```
+
+The `dedup_key` is what makes mechanical clustering possible without judgment:
+for generation, normalize titles / claim-stems / obligation-statements to a
+canonical string and cluster on string match / near-match; for extraction, the
+canonical id already identifies the unit. No model decides "are these the
+same?" by *taste* — the key decides by *normalization rule*. Domain-specific
+fields (an idea's hypothesis, a paper's method) may be inlined alongside these
+keys rather than buried in an opaque `payload`.
 
 ### Dedup discipline
 
@@ -273,9 +297,13 @@ A SKILL that fans out must specify all of:
 
 1. **Tier-portable dispatch.** State the Tier-1 parallel form AND the
    Tier-3 sequential fallback. Never assume `Agent` or Workflow exists.
-2. **Per-shard structured output.** Each shard returns the candidate-set
-   schema (`shard_id`, `candidates[]`, `dedup_key`). No prose-only
-   shards.
+2. **Per-shard structured output.** Each shard returns a structured object
+   keyed by `shard_id`, never prose. A *generation* fan-out (e.g.
+   idea-creator's lenses) returns `candidates[]`, each item carrying a
+   `dedup_key`. An *extraction* fan-out over a fixed input set (e.g.
+   research-lit per-paper, proof-checker per-section) returns `entries[]`,
+   each item carrying its canonical id as the `dedup_key`. Either shape:
+   `shard_id` + a keyed list + a dedup/identity key per item.
 3. **Mechanical dedup before the jury.** On the merged union, on the
    executor, judgment-free, declared metric — to control jury cost and
    rate-limit exposure.

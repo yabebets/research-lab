@@ -134,6 +134,44 @@ mcp__codex__codex:
 
 Save the returned `threadId` for the trace; do NOT pass it to Thread 2.  Save the attack memo verbatim — both Thread 2 and the human-readable report use it.
 
+### Step 2.5 (optional, `beast` effort): multi-axis attack fan-out
+
+**Default OFF.** The deliverable of this skill *is* a verdict — the single
+strongest rejection paragraph — and
+[`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md)
+is explicit: **do not fan out the verdict; fan out only the evidence that
+feeds it.** The default single-commitment attack (Step 2) is deliberate —
+forcing one paragraph produces sharper feedback than a balanced list (see *Why
+This Exists*). Do **not** replace it with a list.
+
+Under `beast` effort you may widen the *evidence* the commitment draws on
+without diluting the commitment:
+
+1. **Axis probes (evidence breadth).** Run the six attack axes (theorem
+   validity / assumption-vs-claim / missing obligation / limit-order /
+   claim-vs-evidence / scope-overclaim) as **separate fresh-codex probes**,
+   each asked for the strongest ~120-word thrust *on that axis alone*. These
+   are evidence-gathering, not the verdict.
+   - **These are NOT Claude subagents, and there is deliberately NO `Agent`
+     grant.** Each probe is a fresh `mcp__codex__codex` call — the adversary
+     must be cross-model (non-Claude). Codex MCP is **serial** (concurrent
+     codex calls hang), so the probes run **sequentially** — Tier-3 in the
+     fan-out ladder. This is exactly why `kill-argument` lists no `Agent` in
+     `allowed-tools`: it spawns nothing; it threads codex calls.
+2. **Commit (the verdict, still single).** A final fresh-codex synthesis reads
+   the six probes plus the paper and must **commit to the single most damaging
+   ~200-word rejection paragraph** — selecting and fusing at most two axes, NOT
+   listing all six. The Step-2 commitment requirement is unchanged; the probes
+   only ensure no axis was overlooked before committing.
+
+The adjudication (Step 3) then runs against this committed attack exactly as in
+the default flow. Cost: `beast` adds ~6 extra serial codex calls — use it for
+the final pre-submission pass on a high-stakes paper, not routinely.
+
+Tracing: record each probe's `threadId` (`axis_probe_thread_ids[]`) and the
+synthesis `threadId` in the trace, the same way Steps 2–3 save their thread
+ids. The committed attack memo, not the six probes, is what Step 3 consumes.
+
 ### Step 3: Adjudication memo (Thread 2, fresh codex with attack + paper)
 
 Invoke a second `mcp__codex__codex` call (still NOT `codex-reply` — Thread 2 is independent of Thread 1's codex history):
