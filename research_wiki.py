@@ -158,11 +158,70 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     root = Path(wiki_root)
     sections = []
 
-    # 1. Project direction (300 chars)
+    # 1. Project direction — structured extraction from RESEARCH_BRIEF.md
+    # Parses the template-defined ## sections to preserve key fields
+    # (problem, constraints, direction) that flat truncation would miss.
+    # Deterministic, no LLM.
     brief_path = root.parent / "RESEARCH_BRIEF.md"
     if brief_path.exists():
-        brief = brief_path.read_text()[:300]
-        sections.append(f"## Project Direction\n{brief}\n")
+        raw = brief_path.read_text()
+
+        # Parse ## sections from the brief
+        sections_map: dict[str, str] = {}
+        current_heading = ""
+        current_lines: list[str] = []
+        for line in raw.split("\n"):
+            if line.startswith("## "):
+                if current_heading:
+                    sections_map[current_heading] = "\n".join(current_lines).strip()
+                current_heading = line[3:].strip()
+                current_lines = []
+            elif current_heading:
+                current_lines.append(line)
+        if current_heading:
+            sections_map[current_heading] = "\n".join(current_lines).strip()
+
+        def _section(name: str) -> str | None:
+            # Exact match first, then a tolerant match so template drift
+            # ("Existing Results" vs "Existing Results (if any)", trailing
+            # punctuation, case) still resolves to the intended section.
+            text = sections_map.get(name, "").strip()
+            if not text:
+                want = name.lower().rstrip(":").strip()
+                for k, v in sections_map.items():
+                    kk = k.lower().rstrip(":").strip()
+                    if kk == want or kk.startswith(want) or want.startswith(kk):
+                        text = v.strip()
+                        if text:
+                            break
+            return text if text else None
+
+        # Priority order for /idea-creator: problem → constraints → direction → background
+        parts: list[str] = []
+        for label, heading in [
+            ("Problem", "Problem Statement"),
+            ("Constraints", "Constraints"),
+            ("Direction", "What I'm Looking For"),
+            ("Background", "Background"),
+            ("Non-goals", "Non-Goals"),
+            ("Domain Knowledge", "Domain Knowledge"),
+            ("Existing Results", "Existing Results (if any)"),
+        ]:
+            text = _section(heading)
+            if text:
+                parts.append(f"**{label}**\n\n{text}")
+
+        if parts:
+            brief = "\n\n".join(parts)
+            sections.append(f"## Project Direction\n{brief}\n")
+        else:
+            # Fallback: the brief uses none of the template's known headings
+            # (custom template, or a free-form brief). Don't silently drop the
+            # whole brief — fall back to the original flat-slice behavior so
+            # /idea-creator still gets *some* project context.
+            flat = raw.strip()[:600]
+            if flat:
+                sections.append(f"## Project Direction\n{flat}\n")
 
     # 2. Gap map (1200 chars)
     gap_path = root / "gap_map.md"
@@ -214,7 +273,8 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
                     next_lines = content.split("\n")[idx+1:idx+3]
                     thesis = " ".join(l for l in next_lines if l.strip() and not l.startswith("#"))
             if title:
-                paper_summaries.append(f"- [{node_id}] {title}: {thesis[:150]}")
+                suffix = f": {thesis[:150]}" if thesis.strip() else ""
+                paper_summaries.append(f"- [{node_id}] {title}{suffix}")
 
         if paper_summaries:
             papers_text = "\n".join(paper_summaries[:12])[:1800]
@@ -245,7 +305,12 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
         else:
             remaining = max_chars - len(pack) - 20
             if remaining > 100:
-                pack += s[:remaining] + "\n...(truncated)\n"
+                chunk = s[:remaining]
+                # Snap to last line break to avoid mid-sentence cut
+                last_nl = chunk.rfind("\n")
+                if last_nl > remaining // 2:
+                    chunk = chunk[:last_nl]
+                pack += chunk + "\n...(truncated)\n"
             break
 
     pack_path = root / "query_pack.md"
