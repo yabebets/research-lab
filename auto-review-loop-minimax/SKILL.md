@@ -153,7 +153,7 @@ Then extract structured fields:
 - **Verdict** ("ready" / "almost" / "not ready")
 - **Action items** (ranked list of fixes)
 
-**STOP CONDITION**: If score >= 6 AND verdict contains "ready" or "almost" → stop loop, document final state.
+**STOP CONDITION**: If score >= 6 AND verdict ∈ {"ready", "almost"} (exact match — "not ready" does NOT qualify) → stop loop, document final state.
 
 #### Phase C: Implement Fixes (if not stopping)
 

@@ -163,7 +163,7 @@ curl -s "${LLM_BASE_URL}/chat/completions" \
 - **Verdict** ("ready" / "almost" / "not ready")
 - **Action items** (ranked list of fixes)
 
-**STOP**: If score >= 6 AND verdict contains "ready/almost"
+**STOP**: If score >= 6 AND verdict ∈ {"ready", "almost"} (exact — "not ready" does NOT qualify)
 
 #### Phase C: Implement Fixes
 
