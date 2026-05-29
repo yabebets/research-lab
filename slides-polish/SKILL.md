@@ -528,7 +528,7 @@ Both the triage pass and the per-slide passes are traced.
 - Compatible with `/paper-poster` workflow (same color discipline) but
   different output cadence.
 - Uses the same `mcp__codex__codex` MCP infrastructure as
-  `/auto-paper-improvement-loop`, `/peer-review`, etc.
+  `/auto-paper-improvement-loop`, `/research-review`, etc.
 - Does **not** call or compose with `/paper-slides` content phases — strict
   separation.
 
