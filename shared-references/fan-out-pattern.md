@@ -206,9 +206,13 @@ pass. After fan-out the merged set should be **mechanically deduped only**
 (cluster near-identical ideas; never drop one for being "weak"). The
 **jury** is the already-existing Phase-4 cross-model devil's-advocate
 pass: GPT-5.5 via Codex MCP surfaces the strongest reviewer objection per
-idea and ranks for a top venue. `/idea-creator` already declares the
-`Agent` tool, so it can run Tier 1/2 where available and falls back to
-sequential enumeration otherwise.
+idea and ranks for a top venue. `/idea-creator` does **not** currently
+declare the `Agent` tool — it was stripped in the WB2 least-privilege
+sweep because its body does not yet fan out. The WB3 fan-out refactor
+re-grants `Agent` in the *same* change that wires these lens shards and
+fixes the Phase-3 gap below (per the re-grant rule in **Allowed-tools
+hygiene**). On a Tier-1 runtime the lenses then run as Workflow shards;
+on Tier 3 they fall back to sequential enumeration with no grant needed.
 
 > ⚠️ **Known gap — idea-creator is an *aspirational* example here, not yet a clean one.**
 > Today `/idea-creator` Phase 3 (`skills/idea-creator/SKILL.md:159,175`)
@@ -281,3 +285,38 @@ A SKILL that fans out must specify all of:
 5. **A breadth-bound justification.** State why this task benefits from
    breadth. If the deliverable IS a verdict, do not fan out the verdict;
    fan out only the evidence that feeds it.
+
+## Allowed-tools hygiene — the `Agent` grant policy
+
+`Agent` in a skill's `allowed-tools` frontmatter is the capability gate for
+**Tier-2** dispatch (spawning Claude subagents via the Agent tool). It is
+**granted only to skills whose body actually fans out** — i.e. whose prose
+instructs the model to spawn parallel Claude subagents. It is **not**
+boilerplate to be copied across skills.
+
+This matters because the other two tiers need no per-skill grant:
+
+- **Tier-1** (ultracode / Workflow) is a *harness* capability, not a tool a
+  skill lists. A skill cannot "grant itself" Workflow; the runtime provides
+  it. So fanning out at Tier-1 requires no `Agent` in `allowed-tools`.
+- **Tier-3** (sequential fallback) spawns nothing — e.g. `/kill-argument`
+  runs its two passes as fresh `mcp__codex__codex` threads, no Agent tool.
+  Correctly, `kill-argument` does **not** grant `Agent`.
+
+So `Agent` is needed *only* for the Tier-2 form, *only* in skills that
+genuinely fan out. As of the WB2 least-privilege sweep, **no mainline skill
+spawns Claude subagents in its body**, so no mainline skill grants `Agent`.
+(48 vestigial grants — pure copied boilerplate, never invoked — were
+removed.) Note that "reviewer **sub-agent**" in several skills refers to the
+cross-model *codex/GPT reviewer*, not the Agent tool, and never implied a
+real grant need.
+
+**Re-granting rule.** A skill that adds genuine fan-out re-introduces
+`Agent` to its `allowed-tools` **in the same change that adds the fan-out
+prose**, and that prose must cite this document (`fan-out-pattern.md`) so
+the grant is self-justifying. Grant tracks usage; never the reverse.
+
+**Enforcement.** `tools/check_skills_inventory.py` fails the drift check if
+any mainline skill grants `Agent` without citing `fan-out-pattern.md` in its
+body. This keeps vestigial grants from creeping back and guarantees every
+real grant is traceable to the convention it follows.
