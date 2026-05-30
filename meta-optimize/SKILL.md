@@ -33,10 +33,14 @@ this loop apply its own patch (the self-acquittal failure mode):
   `$var`/absolute paths, language file APIs) is not all caught. **Full structural
   prevention requires either removing this skill's `Bash` or an FS sandbox** — over-built
   for a not-yet-load-bearing producer, so deferred to when the gate carries real
-  auto-modification volume (a brick-3 trigger). The backstop against a deliberate write is
-  **detection, not prevention**: a corpus change with no valid/current `provenance` stamp
-  (content-hash mismatch) is catchable in a pre-push integrity check. Its legitimate Bash
-  writes go only to `.aris/meta/`.
+  auto-modification volume (a brick-3 trigger). The intended backstop against a deliberate
+  write is **detection, not prevention** — a corpus change with no valid/current
+  `provenance` stamp (content-hash mismatch) *would be* catchable in a pre-push integrity
+  check — but that verifier is **NOT yet built** (`provenance.py` has `content_hash` but no
+  integrity-check subcommand, and no pre-push hook runs one). So today the deliberate-write
+  case is neither prevented nor actively detected; track the integrity verifier as a
+  follow-up before this producer goes load-bearing. Its legitimate Bash writes go only to
+  `.aris/meta/`.
 
 See [`shared-references/acceptance-gate.md`](../shared-references/acceptance-gate.md):
 a loop can DRIVE (propose, review) same-model, but the ACQUITTAL that lands a change

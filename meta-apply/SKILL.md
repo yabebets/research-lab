@@ -119,8 +119,11 @@ auto-curator reads it as evidence):
   survivors, never resurrects a KILL.
 - **Cross-family or refuse.** `assert_cross_family` must not raise. A
   `deterministic:<verifier>` reviewer is valid per skill-governance.md.
-- **Corpus mutation via Write/Edit only**, never Bash (the `corpus_write_guard` hook
-  enforces this harness-wide).
+- **Corpus mutation goes through Write/Edit** (reviewable, attributable), not Bash. The
+  `corpus_write_guard` hook (if installed) additionally denies Bash corpus writes — it
+  does NOT gate Write/Edit, so it does not by itself stop this skill from editing the
+  corpus; the jury-at-landing + stamp discipline above is what governs Write/Edit
+  mutations (that discipline is procedure, not a hook-enforced mechanism).
 - **Back up before every mutation.** Reversible by construction.
 - **Only land staged patches.** Applies what producers staged in `.aris/meta/pending/`;
   invents nothing of its own.

@@ -323,6 +323,7 @@ here first.
 | `evidence_check.py` (in `/result-to-claim`, `/paper-claim-audit`) | B (side-effect) | Deterministic pre-check that downgrades hallucinated-evidence claims before the Codex jury; if unresolved the jury still runs (warn-and-skip). A deterministic gate DRIVES, it does not ACQUIT — `verified` means the cited number exists, not that it supports the claim |
 | `capture_filter.py` (in `/research-wiki` capture, `/meta-optimize` Step 3) | B (side-effect) | Anti-self-poisoning screen on durable captures; if unresolved the capture proceeds (the screen is advisory, and a passing screen is never an ACCEPT — the cross-model jury still judges) |
 | `provenance.py` (in `/meta-apply`; `assert_cross_family`/`stamp`) | A (gate) | The landing acquittal: if unresolved, `/meta-apply` cannot verify author≠reviewer family and MUST refuse to land (fail-closed). `stamp()` itself raises on same-family, so an unresolved or same-family case blocks the corpus mutation |
+| `run_state.py` (in `/research-pipeline`) | B (side-effect) | Resumability is a convenience; the pipeline still runs end-to-end without it (warn-and-skip, never block). Predicate = `RESUMABLE` / `— resume <run_id>` set |
 
 When a SKILL invokes a helper not listed above, add the row here as
 part of the same commit and link the chosen policy. Inconsistency in

@@ -94,5 +94,11 @@ own skills. That is exactly the self-poisoning failure
 [`capture-antipatterns.md`](capture-antipatterns.md) guards against, one level up:
 there it is a *captured claim* that hardens into a self-cited falsehood; here it is
 a *captured skill* that an unreviewed loop grants itself authority to keep. ARIS's
-increment is to make cross-family **non-negotiable and structural** — not a config
-flag but an assertion you cannot stamp around.
+increment is to make cross-family a **structural assertion on the stamp's content**:
+`assert_cross_family` genuinely raises, so you cannot produce a *valid* same-family stamp
+(not a config flag you can flip). The scope is precise — this governs *what a stamp can
+say*, not *whether a write calls `stamp()` at all*. Whether a corpus mutation is stamped
+is governed by `/meta-apply`'s landing procedure; an edit that skips the stamp leaves no
+provenance — that case is **detectable, not impossible** (a missing / stale-hash stamp is
+what a pre-push integrity check would catch — that verifier is a follow-up, see
+meta-optimize's note).

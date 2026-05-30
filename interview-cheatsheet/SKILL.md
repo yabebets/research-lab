@@ -85,7 +85,7 @@ You are reviewing a long-form Chinese interview-prep tutorial on <TOPIC> for mat
 
 ## Files to read (READ-ONLY)
 - Draft MD: <MD_PATH>
-- Style reference: /Users/yangruofeng/Desktop/aris_paper_discussion/aris_repo/docs/tutorials/attention_tutorial.md
+- Style reference: docs/tutorials/attention_tutorial.md
   (Read this only for STYLE — do NOT score the draft against the reference's content topic.)
 
 ## Return JSON with these 10 checks
