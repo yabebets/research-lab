@@ -11,7 +11,7 @@ turn — including a reviewer's context (a poisoned wiki node that whispers
 ## Two layers — and a clean scan is NOT an acquittal
 
 ```
-layer 1  tools/threat_scan.py   regex · deterministic · fail-closed · NO model
+layer 1  tools/threat_scan.py   regex · deterministic · block-on-hit (fail-OPEN to novelty) · NO model
 layer 2  the cross-model jury   codex/gemini · catches SEMANTIC poisoning
 ```
 
@@ -83,6 +83,12 @@ raw text is preserved depends on the store:
 
 ## The helper
 
+> A calling SKILL must resolve `threat_scan.py` via the canonical 3-layer chain
+> (`integration-contract.md` §2: `.aris/tools/` → `tools/` → `$ARIS_REPO/tools/`) and
+> invoke `python3 "$THREAT_SCANNER" …`. The literal `tools/threat_scan.py` paths below are
+> illustrative of the bundled location — do NOT hardcode them in a SKILL (the hardcoded
+> form silently fails in a project without `tools/` on disk).
+
 ```
 from threat_scan import scan_for_threats, first_threat_message, quarantine
 scan_for_threats(text, scope="strict")        # -> [pattern_id, ...]  ([] = clean)
@@ -90,7 +96,7 @@ first_threat_message(text, scope="strict")     # -> "Blocked: …"  | None  (blo
 quarantine(text, scope="strict", label="...")  # -> (safe_text_or_placeholder, findings)
 ```
 
-CLI: `python3 tools/threat_scan.py <file|-> --scope strict [--quarantine]`
+CLI (resolve the path per §2): `python3 "$THREAT_SCANNER" <file|-> --scope strict [--quarantine]`
 (exit 1 on any finding) — usable as a pre-merge gate on PR content.
 
 **Pattern discipline:** anchor on attack-specific vocabulary, NOT bossy English
