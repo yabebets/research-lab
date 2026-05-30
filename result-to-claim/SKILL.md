@@ -49,19 +49,59 @@ For every claim that cites a specific number + a source file, verify the evidenc
 *exists* mechanically — no model call — to catch **hallucinated evidence** before
 the jury runs (see [`shared-references/evidence-precheck.md`](../shared-references/evidence-precheck.md)).
 
-Resolve the helper via the canonical chain (integration-contract §2):
-`.aris/tools/evidence_check.py` → `tools/evidence_check.py` → `$ARIS_REPO/tools/evidence_check.py`
-(warn-and-skip if unresolved — never block the audit).
+**1. Build the claims list.** From the cited numbers and their result files, write
+`[{"id", "value", "source"}, ...]` to `.aris/claims.json` (`source` is the result
+file/glob relative to the project root; `value` is the cited number or string).
 
-1. Build a claims list `[{"id", "value", "source"}, ...]` from the cited numbers
-   and their result files, write it to `.aris/claims.json`, and run
-   `python3 <evidence_check> <root> --batch .aris/claims.json`.
-2. Any claim returned `path_missing` or `value_not_found` is **hallucinated
-   evidence** — mark it `claim_supported: no` with `integrity_status: evidence_not_found`
-   immediately; do NOT spend a Codex call defending a number that isn't in the data.
-3. **Carry the per-claim pre-check status into the Step-2 Codex context** (a small
-   `evidence pre-check: <id> → verified | value_not_found | path_missing` table) so
-   the jury knows which claims have real evidence to read.
+**2. Run the pre-check — this is a real step, not a suggestion.** Execute the block
+below (resolver per integration-contract §2, **Policy B**: warn-and-skip if the helper
+is unresolved — never block the audit):
+
+```bash
+# Policy B = warn-and-skip: nothing here may abort the audit. cd is non-fatal, the
+# helper run is explicitly non-blocking, no pipefail-fragile pipe.
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" 2>/dev/null || true
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+EVIDENCE_CHECK=".aris/tools/evidence_check.py"
+[ -f "$EVIDENCE_CHECK" ] || EVIDENCE_CHECK="tools/evidence_check.py"
+[ -f "$EVIDENCE_CHECK" ] || { [ -n "${ARIS_REPO:-}" ] && EVIDENCE_CHECK="$ARIS_REPO/tools/evidence_check.py"; }
+[ -f "$EVIDENCE_CHECK" ] || EVIDENCE_CHECK=""
+
+mkdir -p .aris
+if [ -n "$EVIDENCE_CHECK" ]; then
+    # NB: evidence_check exits 1 when it FINDS hallucinated evidence (value_not_found /
+    # path_missing) — that is the useful signal, NOT a failure. So judge success by
+    # whether valid JSON was produced, never by exit code. `|| true` keeps set -e calm.
+    python3 "$EVIDENCE_CHECK" . --batch .aris/claims.json > .aris/evidence_precheck.json 2>.aris/evidence_precheck.err || true
+    if [ -s .aris/evidence_precheck.json ] && python3 -c "import json,sys;json.load(open('.aris/evidence_precheck.json'))" 2>/dev/null; then
+        cat .aris/evidence_precheck.json
+    else
+        echo "WARN: evidence_check produced no valid output (see .aris/evidence_precheck.err);" >&2
+        echo "      pre-check skipped (Policy B); the Codex jury still runs." >&2
+    fi
+else
+    echo "WARN: evidence_check.py not resolved at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+    echo "      Pre-check skipped (Policy B); the Codex jury still runs. Fix: rerun" >&2
+    echo "      bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+fi
+```
+
+The output is `{"results": [{id, value, source, status, ...}], "summary": {status: n}}`
+with `status ∈ {verified, value_not_found, path_missing, unparseable}`.
+
+**3. Act on the statuses.** Any claim returned `value_not_found` or `path_missing` is
+**hallucinated evidence** — mark it `claim_supported: no` with
+`integrity_status: evidence_not_found` immediately; do NOT spend a Codex call defending a
+number that isn't in the data. `unparseable` claims (no usable value/source) just go to
+the jury normally.
+
+**4. Carry the per-claim status into Step 2.** Feed a small
+`evidence pre-check: <id> → verified | value_not_found | path_missing | unparseable`
+table (from `.aris/evidence_precheck.json`) into the Step-2 Codex prompt so the jury knows
+which claims have real evidence to read. If the pre-check was skipped (helper unresolved),
+say so in that slot rather than omitting it.
 
 `verified` here means only that the cited evidence **exists** — whether it
 **supports** the claim is still the Codex jury's call in Step 2 (a deterministic
