@@ -173,7 +173,7 @@ For each optimization target, generate a concrete diff:
 > diff (a producer-relayed verdict would be forgeable). Record this result as
 > `advisory_screen` only.
 
-Send each patch to GPT-5.4 xhigh for adversarial review:
+Send each patch to GPT-5.5 xhigh for adversarial review:
 
 ```
 mcp__codex__codex:
