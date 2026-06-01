@@ -761,7 +761,7 @@ Append all iteration scores and feedback to `poster/POSTER_VISUAL_REVIEW.md`:
 
 ### Phase 6: Codex Reviewer Review
 
-Send the poster content plan + key LaTeX sections to GPT-5.4 xhigh for review.
+Send the poster content plan + key LaTeX sections to GPT-5.5 xhigh for review.
 
 ```text
 spawn_agent:
