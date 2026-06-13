@@ -178,8 +178,8 @@ def check_inventory() -> list[str]:
 
     en_h2 = numbered_h2_count(readme)
     cn_h2 = numbered_h2_count(readme_cn)
-    require(en_h2 == 17, f"README.md has {en_h2} numbered H2 sections; expected 17 (Phase A)", failures)
-    require(cn_h2 == 17, f"README_CN.md has {cn_h2} numbered H2 sections; expected 17 (Phase A)", failures)
+    require(en_h2 == 16, f"README.md has {en_h2} numbered H2 sections; expected 16 (Phase A)", failures)
+    require(cn_h2 == 16, f"README_CN.md has {cn_h2} numbered H2 sections; expected 16 (Phase A)", failures)
 
     # Agent-grant hygiene (WB2): `Agent` in allowed-tools is the Tier-2
     # fan-out capability gate. Per shared-references/fan-out-pattern.md it is
