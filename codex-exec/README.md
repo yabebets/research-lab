@@ -8,14 +8,18 @@ call as a `codex exec` subprocess. Nothing in the skills changes.
 ## Register
 
 ```bash
-claude mcp remove codex -s user            # only if the old registration exists
-claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"
+cd ~/aris_repo && git pull                  # existing install: older clones do not have this directory
+claude mcp remove codex -s user             # only if the old `codex mcp-server` registration exists
+claude mcp add codex -s user -- python3 "$(pwd)/mcp-servers/codex-exec/server.py"
 ```
 
-Use the absolute path of your ARIS clone. Restart Claude Code; `claude mcp list`
-should show `codex … ✓ Connected`. Works on every codex-cli version that has
-`codex exec` (all of them), so there is no reason to keep the old registration
-on 0.153 either.
+Use the absolute path of your ARIS clone (`$(pwd)` from inside it). Restart
+Claude Code; `claude mcp list` should show `codex … ✓ Connected`. Works on every
+codex-cli version that has `codex exec` (all of them), so there is no reason to
+keep the old registration on 0.153 either. Skills need no change.
+
+Installed by copying `skills/` without keeping a clone? Clone the repo anywhere
+and point at its `server.py`; the file is self-contained.
 
 Other MCP hosts (Cursor, Trae, Antigravity, Copilot CLI) use the same key with
 `"command": "python3", "args": ["/absolute/path/to/aris_repo/mcp-servers/codex-exec/server.py"]`.
