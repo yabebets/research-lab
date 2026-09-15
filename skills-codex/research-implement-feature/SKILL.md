@@ -144,7 +144,7 @@ Under `implement-stage/`: `SPEC.md` · `ASSUMPTIONS.md` (the ledger) ·
 ## Notes
 
 - **A-001** — `test` is held out and `train` leaks. Reversing it is one line in
-  `configs/eval.yaml`. Override: `— assume: A-001=test`.
+  `configs/eval.yaml`.
 ```
 
 **Which decisions get a row.** Only two classes: `interface` (changes call sites,
@@ -348,7 +348,7 @@ silently dropped.
 | `assurance` | Effect of `semantic_undeclared > 0` |
 |---|---|
 | `draft` | reported, non-blocking |
-| `submission` | **blocks the final report** until those rows are in the ledger |
+| `submission` | **blocks the final report** until those rows are in the ledger and a re-sweep returns them resolved (or the round budget is exhausted — then the report leads with them); a same-family `clean` only ever clears it as `provisional`, see below |
 
 **Mirror limitation.** A same-family sweep may **flag**, never **acquit**. At
 `assurance: submission` a `verdict: clean` from this mirror is recorded as

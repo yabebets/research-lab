@@ -185,8 +185,7 @@ rejected and why, what reversing it would cost, and the one-line override.
 
 - **A-001** — `test` is the held-out split and `train` leaks; `validation` is the
   only choice that leaves the number meaning what a reader assumes. Reversing it
-  is one line in `configs/eval.yaml`. Override: re-invoke with
-  `— assume: A-001=test`.
+  is one line in `configs/eval.yaml`.
 ```
 
 **Which decisions get a row.** Only `interface` and `semantic` ones:
@@ -539,7 +538,7 @@ the decoding-loop call site, plus `scripts/bench_eviction.py`. *Success command*
 *Notes* — **A-001**: full ShareGPT is 40 min a run and synthetic prompts are
 unrepresentative of the cache-reuse pattern being measured; the 500-prompt sample
 keeps the number comparable at smoke scale. One line in `configs/bench.yaml` to
-change. Override: `— assume: A-001=full`.
+change.
 
 **Phase 1 — ladder:** F0 spine (`bench_eviction.py` end-to-end, stub policy that
 evicts nothing) · F1 real LRU policy · F2 hit-rate accounting · F3 full-cache
