@@ -23,7 +23,8 @@ it is Codex/same-family/provisional; overlay or deterministic routes are accepte
 
 ## Bounded execution contract
 
-The Codex mirror preserves the same machine-readable limits:
+Candidate-generation and source-extraction stages in `idea-creator`,
+`research-lit`, and `proof-checker` preserve the same machine-readable limits:
 
 ```yaml
 ARIS_FANOUT_AGENT_TYPE: aris-fanout-leaf
@@ -53,6 +54,15 @@ After collection and fallback, emit a **coverage receipt** with
 planned/completed/failed shard IDs, planned/covered/uncovered unit IDs, and a
 mechanically computed `coverage_complete` boolean. The receipt proves execution
 coverage only and does not upgrade the base mirror's provisional assurance.
+
+### Implementation delegation
+
+`lean-formalize` also delegates proof implementation in owned modules. Those
+workers need file edits and compilation, so they do not use the read-only leaf
+contract above. Give each worker a stable lemma interface, its owned files, and
+a concrete compile target; integrate the result at the actual caller and retain
+the skill's type, axiom, and reviewer checks. The general separation between
+implementation work and acceptance judgments still applies.
 
 ## Core principle: decouple FAN-OUT from JURY
 
@@ -386,7 +396,8 @@ genuinely fan out. The WB2 least-privilege sweep removed 48 vestigial grants
 (pure copied boilerplate, never invoked); since then **only skills that
 genuinely fan out at Tier-2 re-grant `Agent`, and each must cite this doc in
 its body** (enforced by `check_skills_inventory.py`). As of writing those are
-`idea-creator`, `proof-checker`, and `research-lit`. Note that "reviewer
+`idea-creator`, `proof-checker`, `research-lit`, and `lean-formalize` (owned-module
+implementation as described above). Note that "reviewer
 **sub-agent**" in several skills refers to a fresh Codex reviewer (provisional
 in the base mirror), not the Agent tool, and never implied a real grant need.
 
