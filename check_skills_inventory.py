@@ -76,7 +76,7 @@ def allowed_tools(text: str) -> list[str]:
     if not frontmatter:
         return []
     match = re.search(
-        r"^allowed-tools:[ \t]*([^\r\n]+)$", frontmatter.group(1), flags=re.MULTILINE
+        r"^allowed-tools:[ \t]*([^\r\n]+)\r?$", frontmatter.group(1), flags=re.MULTILINE
     )
     if not match:
         return []
