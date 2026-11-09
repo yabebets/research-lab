@@ -8,6 +8,7 @@
   rl new <name> [--domain ml|cv|nlp|robotics|systems] [--path DIR]   研究プロジェクトを作る
   rl status [name|path]                                               台帳の要約
   rl check [name|path]                                                台帳の書式の確認
+  rl readme [name|path] [--check]                                     README の「検証状況」を台帳から書き直す
   rl doctor [--clouds]                                                ツール・接続の確認
   rl link                                                             スキルを ~/.claude/skills に登録
   rl sync                                                             上流スキルの更新と索引の再生成
@@ -161,6 +162,8 @@ def cmd_new(a):
     for d in ("runs", "src", "configs", "paper", "notes", ".gpu"):
         (target / d).mkdir(exist_ok=True)
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=target, check=True)
+    _, readme, _ = readme_state(target)
+    (target / "README.md").write_text(readme)
     print(f"作成しました: {target}")
     print(f"  ARIS スキル {len(ARIS_CORE) - len(missing)} 個をプロジェクトに登録" + (f"（見つからない: {missing}）" if missing else ""))
     print("  次: cd して Claude Code を開き「research-lab で S1 から始めて」と頼む")
@@ -267,7 +270,110 @@ def cmd_check(a):
     for e in errs:
         print(f"✗ {e}")
     print("✓ 台帳は正しく読めます" if not errs else f"{len(errs)} 件の問題")
+    if not errs:
+        _, _, state = readme_state(proj)
+        if state != "ok":
+            print("⚠ README の検証状況が台帳と合っていません（`rl readme` で直す）")
     sys.exit(1 if errs else 0)
+
+
+# ---------------------------------------------------------------- readme
+AUTO_START, AUTO_END = "<!-- rl:auto:start -->", "<!-- rl:auto:end -->"
+STAGE_NAMES = {"S-1": "興味・テーマ", "S0": "準備", "S1": "アイデア・文献", "S2": "計画", "S3": "実験",
+               "S4": "分析・主張", "S5": "執筆", "S6": "自己査読", "S7": "査読対応"}
+STRENGTH = {"strong": "言い切る", "qualified": "限定つき", "exploratory": "探索的"}
+CLAIM_STATUS = {"candidate": "候補", "frozen": "確定（G3）", "retracted": "取り下げ"}
+
+
+def _cell(x) -> str:
+    return str(x if x is not None else "").replace("|", "\\|").replace("\n", " ").strip()
+
+
+def render_auto(proj: Path) -> str:
+    """README の「検証状況」の枠の中身。台帳にあることだけを書く（数字は claims.yaml と runs/ から）。"""
+    led = load(proj / "research.yaml")
+    out = [f"_台帳（research.yaml・claims.yaml・runs/）から `rl readme` が生成。最終更新 {dt.date.today().isoformat()}_", ""]
+    st = str(led.get("stage"))
+    out.append(f"- **段階**：{st} {STAGE_NAMES.get(st, '')}")
+    gl = []
+    for g, v in (led.get("gates") or {}).items():
+        mark = "✓" if v.get("approved") else ("判断待ち" if v.get("pending") else "-")
+        when = f"（{v.get('decided_at')}）" if v.get("approved") and v.get("decided_at") else ""
+        gl.append(f"{g} {mark}{when}")
+    out.append("- **確認ポイント**：" + " / ".join(gl))
+    if led.get("venue_target"):
+        out.append(f"- **投稿先の目安**：{_cell(led['venue_target'])}")
+    out += ["", "**研究の問い**", "", f"> {_cell(led.get('question')) or '（未確定。G1 で決める）'}", "", "**仮説**", ""]
+    hyps = led.get("hypotheses") or []
+    out += [f"- {_cell(h)}" for h in hyps] or ["（まだない。S2 で反証できる形に書き、G2 で確定する）"]
+    out += ["", "**主張と証拠**", ""]
+    cl = []
+    if (proj / "claims.yaml").exists():
+        cl = (load(proj / "claims.yaml") or {}).get("claims") or []
+    live = [c for c in cl if c.get("status") != "retracted"]
+    if live:
+        out += ["| ID | 主張 | 強さ | 証拠の種類 | 状態 | 証拠（run） |", "|---|---|---|---|---|---|"]
+        for c in live:
+            ev = c.get("evidence") or []
+            out.append(f"| {_cell(c.get('id'))} | {_cell(c.get('text'))} | {STRENGTH.get(c.get('strength'), _cell(c.get('strength')))} "
+                       f"| {_cell(c.get('eval_type'))} | {CLAIM_STATUS.get(c.get('status'), _cell(c.get('status')))} | {len(ev)} 件 |")
+    else:
+        out.append("（まだない。主張は claims.yaml に証拠の run_id とともに置く）")
+    if len(cl) > len(live):
+        out.append(f"\n取り下げた主張：{len(cl) - len(live)} 件（claims.yaml に記録）")
+    runs, by, test_evals = count_runs(proj)
+    mx = (led.get("protocol") or {}).get("max_test_evals")
+    out += ["", f"- **実行**：{len(runs)} 件" + (f"（{', '.join(f'{k} {v}' for k, v in by.items())}）" if by else "")
+            + f"。テストセットでの評価 {test_evals} 回" + (f" / 上限 {mx} 回" if mx else "")]
+    tasks = [t for t in (led.get("tasks") or []) if t.get("status") != "done"]
+    if tasks:
+        out += ["", "**次にやること**", ""]
+        for t in tasks[:6]:
+            title = _cell(t.get("title"))
+            out.append(f"- {t.get('id')}：{title[:110] + '…' if len(title) > 110 else title}")
+        if len(tasks) > 6:
+            out.append(f"- ほか {len(tasks) - 6} 件（`rl status`）")
+    bl = led.get("blockers") or []
+    if bl:
+        out += ["", "**止まっている理由**", ""] + [f"- {_cell(b.get('reason'))}（要るもの：{b.get('needs')}）" for b in bl]
+    return "\n".join(out)
+
+
+def _strip_date(block: str) -> str:
+    return "\n".join(l for l in block.splitlines() if "最終更新" not in l)
+
+
+def readme_state(proj: Path):
+    """(README の本文, 新しい本文, 状態) 状態は ok | stale | no-markers | missing。"""
+    f = proj / "README.md"
+    new_block = render_auto(proj)
+    if not f.exists():
+        return "", f"# {proj.name}\n\n## 検証状況\n{AUTO_START}\n{new_block}\n{AUTO_END}\n", "missing"
+    s = f.read_text()
+    if AUTO_START not in s or AUTO_END not in s:
+        return s, s.rstrip("\n") + f"\n\n## 検証状況\n{AUTO_START}\n{new_block}\n{AUTO_END}\n", "no-markers"
+    head, rest = s.split(AUTO_START, 1)
+    old_block, tail = rest.split(AUTO_END, 1)
+    if _strip_date(old_block.strip("\n")) == _strip_date(new_block):
+        return s, s, "ok"
+    return s, f"{head}{AUTO_START}\n{new_block}\n{AUTO_END}{tail}", "stale"
+
+
+def cmd_readme(a):
+    proj = resolve_project(a.project)
+    old, new, state = readme_state(proj)
+    msg = {"ok": "README の検証状況は台帳と一致しています", "stale": "README の検証状況が台帳と食い違っています",
+           "no-markers": "README に自動の枠（rl:auto）がありません", "missing": "README.md がありません"}[state]
+    if a.check:
+        print(("✓ " if state == "ok" else "✗ ") + msg)
+        sys.exit(0 if state == "ok" else 1)
+    if state == "ok":
+        print("✓ " + msg)
+        return
+    (proj / "README.md").write_text(new)
+    print(f"{msg} → 書き直しました: {proj / 'README.md'}")
+    if state in ("missing", "no-markers"):
+        print("  手で書く欄（一言・目的と狙い・先行研究との差分・方法の骨格）は templates/project/README.md を参考に足す")
 
 
 # ---------------------------------------------------------------- doctor
@@ -554,6 +660,8 @@ def main():
     p.set_defaults(fn=cmd_new)
     p = sub.add_parser("status"); p.add_argument("project", nargs="?"); p.set_defaults(fn=cmd_status)
     p = sub.add_parser("check"); p.add_argument("project", nargs="?"); p.set_defaults(fn=cmd_check)
+    p = sub.add_parser("readme", help="README の「検証状況」を台帳から書き直す"); p.add_argument("project", nargs="?")
+    p.add_argument("--check", action="store_true", help="書き直さず、合っていなければ終了コード 1"); p.set_defaults(fn=cmd_readme)
     p = sub.add_parser("doctor"); p.add_argument("--clouds", action="store_true"); p.set_defaults(fn=cmd_doctor)
     p = sub.add_parser("link"); p.set_defaults(fn=cmd_link)
     p = sub.add_parser("config", help="手元の設定（記録先・ロボット・計算環境）を表示"); p.add_argument("key", nargs="?", help="例: robot.repo")

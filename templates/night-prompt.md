@@ -18,6 +18,7 @@
    - 実行したら `runs/<run_id>/`（run.yaml・config.yaml・metrics.json・status）
    - 段階が進んだら `stage` を更新する
    - `rl check` で台帳が正しく読めることを確かめる（失敗したら直す）
+   - `rl readme` で README の検証状況を台帳に合わせる（README に数字を手で書かない）
    - 変更したファイルを `git add` して `git commit`（push はしない）
 8. 最後に、この回でやったこと・結果・次のタスクを 3〜5 行で書いて終わる。
 

@@ -13,7 +13,7 @@ ML・CV・NLP・CS・AI・フィジカル AI・ロボティクスの研究を、
 
 ```bash
 ~/research-lab/bin/rl link        # 自前スキルを ~/.claude/skills に登録、rl を ~/.local/bin に
-cp config.example.yaml config.yaml  # 記録先・手元のロボット・計算環境を書く（git の管理外）
+cp config.example.yaml config.yaml  # 記録先・資料の控え・手元のロボット・計算環境を書く（git の管理外）
 rl doctor                         # 足りないものを表示
 ```
 
@@ -37,11 +37,12 @@ Codex を査読役にするので、`codex login` を済ませておく。
 |---|---|
 | `rl new <name> --domain ml\|cv\|nlp\|robotics\|systems` | 研究プロジェクトを作る（台帳・計画・ARIS スキルの登録・Codex 査読役の設定） |
 | `rl status [name]` | 段階・ゲート・GPU 予算・実行の数・test での評価回数・未完了のタスク・blockers |
+| `rl readme [name] [--check]` | プロジェクトの README の「検証状況」（問い・仮説・主張と証拠・次にやること）を台帳から書き直す。書き方は `skills/research-lab/references/readme.md` |
 | `rl night [name] [--iterations N] [--budget-usd X] [--hours H]` | 夜間ループ（1 回ごとに新しいセッション、上限つき、ゲートで止まる） |
 | `rl gpu up <name> <task.yaml> --hours H --usd-per-hour X` | GPU を立てる（G2・上限時間・残り予算を確認してから） |
 | `rl gpu down <name> <cluster>` / `rl gpu reap` / `rl gpu status` | 消す・期限切れを消す・一覧 |
 | `rl doctor [--clouds]` | ツール・接続の確認 |
-| `rl config [key]` | 手元の設定（記録先・ロボット・計算環境）を表示。例：`rl config robot.repo` |
+| `rl config [key]` | 手元の設定（記録先・資料の控え・ロボット・計算環境）を表示。例：`rl config robot.repo` |
 | `rl sync` | 上流スキルを更新し、索引を作り直す |
 
 ## 構成
@@ -49,6 +50,8 @@ Codex を査読役にするので、`codex login` を済ませておく。
 ```
 skills/                    グローバルに登録する自前スキル（rl link）
   research-lab/            入口・進行・台帳・夜間ループ
+  research-themes/         興味の範囲 → テーマの候補（条件から出発、カード 3〜5 枚）
+  research-program/        テーマ → 論文・プロジェクトの単位（幹・並び・依存・資産、notes/program.md）
   ml-rigor/                事前登録・分岐の庭のチェック・統計（scripts/rl_stats.py）
   gpu-cloud/               RunPod / Lambda（SkyPilot）・予算・自動削除
   physical-ai-research/    ロボティクス・VLA・sim2real・実機評価・安全

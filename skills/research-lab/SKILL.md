@@ -22,6 +22,7 @@ description: ML・CV・NLP・CS・AI・フィジカル AI・ロボティクス�
 
 | 段階 | やること | 主に使うスキル | 出口 |
 |---|---|---|---|
+| S-1 興味 → テーマ → プログラム | 興味の範囲を話し合い、条件（ゴール・強み・制約）からテーマの候補を出す。テーマが見えたら、幹（長期の問い）と論文の並び・依存・資産を `notes/program.md` に整理する。1 論文 = 1 プロジェクト | `research-themes`、`research-program` | テーマのカード 3〜5 枚と `program.md`。プロジェクトをどう切るかが決まっている |
 | S0 準備 | `rl new <name> --domain <ml\|cv\|nlp\|robotics\|systems>` でプロジェクトを作る。計算資源と査読役を確認（`rl doctor`） | — | `research.yaml` ができている |
 | S1 アイデア・文献 | 文献調査、未解決の問いの洗い出し、アイデア候補、新規性の確認 | `ml-lit-review`、ARIS `research-lit` `idea-discovery`（ロボットは `idea-discovery-robot`）`novelty-check` `kill-argument`、Orchestra `21-research-ideation` | 候補 3〜5 個と、それぞれの新規性・実現性・リスク |
 | **G1 テーマ確定** | 人がテーマと研究の問い（RQ）を選ぶ | — | `research.yaml` の `question` と `hypotheses` が確定 |
@@ -35,7 +36,7 @@ description: ML・CV・NLP・CS・AI・フィジカル AI・ロボティクス�
 | **G4 投稿の判断** | 人が投稿先・投稿するかどうか・残った弱点への対応を決める | — | 投稿 or 次の版の計画 |
 | S7 査読対応 | rebuttal、再投稿 | ARIS `rebuttal` `resubmit-pipeline`、`venue-review` | 回答書と改訂版 |
 
-G1〜G4 では、判断材料を 1 枚にまとめて（選択肢・根拠・リスク・推奨）止まる。夜間ループ中なら、`research.yaml` の `gates.<G>.pending: true` を立ててループを終える。
+G1〜G4 では、判断材料を 1 枚にまとめて（選択肢・根拠・リスク・推奨）止まる。ゲートを通ったら、README の手で書く欄（一言・目的と狙い・先行研究との差分・方法の骨格）を見直す（[references/readme.md](references/readme.md)）。夜間ループ中なら、`research.yaml` の `gates.<G>.pending: true` を立ててループを終える。
 
 ## 自律で進めてよい範囲（ハイブリッド）
 
@@ -67,11 +68,13 @@ G1〜G4 では、判断材料を 1 枚にまとめて（選択肢・根拠・リ
 ```bash
 rl new <name> --domain robotics     # projects/<name>/ に作る（別の場所なら --path）
 rl status <name>                    # 段階・ゲート・予算・未完了タスク・最新の実行
+rl readme <name>                    # README の「検証状況」を台帳から書き直す
 rl doctor                           # ツール・GPU クラウド・Codex 査読役の確認
 ```
 
 ```
 <project>/
+  README.md         # 概要・目的と狙い・先行研究との差分・方法（手で書く）＋ 検証状況（rl readme が生成）
   research.yaml     # 台帳（段階・ゲート・予算・タスク・blockers）
   claims.yaml       # 主張と証拠（run_id）の対応
   plan.md           # 実験計画（G2 で承認する）
@@ -95,6 +98,19 @@ G1〜G4 を通るたび、判断の記録をノートに残す。研究のコー
 - 書き方：`notes.kind: mcp` なら `notes.mcp_tool` で書く。使えないとき、または `kind: dir` のときは、`notes.root` の下に Markdown を直接書く。`kind: none` なら記録しない
 - フロントマターと命名は `notes.conventions` に従う
 
+## 集めた資料の控え
+
+調査や作業の途中で集めた PDF・参考情報・研究メモは、プロジェクトとノートに加えて、控えの置き場にも残す。置き場は `rl config archive` で確認する（`kind: none` なら残さない）。ノートが「考えと判断」なのに対し、こちらは「元の資料そのもの」を後から引けるようにするためのもの。
+
+- 何を残すか：読んだ論文・資料の PDF、参考情報（URL の一覧・BibTeX・比較表・検索ログ）、研究メモ（調査の要約・テーマ案・打ち合わせのメモ）。コード・データセット・チェックポイント・認証情報は置かない
+- 置き場所：`archive.layout` に従う。まず `archive.folder_id` の下を見て、テーマ・プロジェクトに当たるサブフォルダがあればそこへ、なければサブフォルダを作る（1 回きりの資料は直下でよい）
+- 書き方（`kind: gdrive`）：Google Drive MCP で、置く前に `search_files`（`parentId = '<フォルダ ID>' and title contains '<題名>'`）で同じものがないか確かめる。
+  - PDF は `create_file` に `base64Content`・`contentMimeType: application/pdf`・`disableConversionToGoogleType: true` で、元のファイル名のまま上げる。大きすぎて上げられないときは、URL と書誌情報を参考情報のメモに書く
+  - 参考情報と研究メモは Markdown を `textContent`・`contentMimeType: text/markdown` で上げ、Google ドキュメントにする。題名は `archive.naming`（`<題名>_YYYYMMDD`）
+  - Drive 上の文書は中身を書き換えない。内容が変わったら新しい日付で作る
+- 使えないとき：MCP が使えない・認証が切れているときは `archive.root` の下に同じ構成で置き、次に使えるようになったら上げる。上げられなかったものは `research.yaml` の `tasks` に残す
+- 残したら、Drive の URL をノート（判断の記録）やプロジェクトの `notes/` から参照する
+
 ## 毎回の始め方（チェックリスト）
 
 1. プロジェクトの `research.yaml` を読む（なければ S0 から）
@@ -102,3 +118,4 @@ G1〜G4 を通るたび、判断の記録をノートに残す。研究のコー
 3. `blockers` を確認し、解消できるものから片付ける
 4. `stage` に対応する行を上の表で確認し、使うスキルの SKILL.md を Read する
 5. 作業が終わったら `research.yaml`（`stage`・`tasks`・`log`）と、必要なら `claims.yaml`・`runs/` を更新する
+6. `rl readme` で README の検証状況を台帳に合わせる。README に数字を手で書かない（主張は claims.yaml から出す）

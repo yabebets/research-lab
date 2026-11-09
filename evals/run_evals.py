@@ -79,10 +79,19 @@ def live(scenarios) -> int:
         r = subprocess.run(["claude", "-p", prompt, "--output-format", "json", "--max-budget-usd", "0.5",
                             "--permission-mode", "dontAsk", "--allowedTools", "Read", "Glob", "Grep",
                             "Bash(python3:*)"], capture_output=True, text=True, timeout=600, cwd=RL)
+        meta = {}
         try:
-            ans = json.loads(r.stdout.strip().splitlines()[-1]).get("result", "")
+            meta = json.loads(r.stdout.strip().splitlines()[-1])
+            ans = meta.get("result") or ""
         except (json.JSONDecodeError, IndexError):
             ans = r.stdout + r.stderr
+        if not ans.strip():
+            # 回答が空（予算切れ・時間切れ・CLI のエラー）は、スキルの不合格と区別して記録する
+            info = {k: meta.get(k) for k in ("subtype", "is_error", "num_turns", "total_cost_usd", "stop_reason")}
+            (outdir / f"{s['id']}.error.json").write_text(json.dumps({**info, "stderr": r.stderr[-2000:]}, ensure_ascii=False, indent=1))
+            fails += 1
+            print(f"{s['id']:<20} error        回答が空 {info}")
+            continue
         (outdir / f"{s['id']}.md").write_text(ans)
         g = grade(ans, s["rubric"])
         fails += g["status"] == "fail"
