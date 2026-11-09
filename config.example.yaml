@@ -12,6 +12,17 @@ notes:                    # 考えと判断の記録先（G1〜G4 を通るた�
     default: research
   conventions: "フロントマターに type: research、date、tags、status を入れる"
 
+archive:                  # 集めた資料の控え（PDF・参考情報・研究メモ）。ノートとは別に、元の資料ごと残す
+  kind: none              # gdrive = Google Drive MCP で folder_id の下に置く / dir = root に置く / none = 残さない
+  mcp_tool: ""            # 例: "Google Drive MCP（search_files・create_file）"
+  folder_id: ""           # kind: gdrive のときのフォルダ ID（URL の folders/ の後ろ）
+  url: ""
+  name: ""
+  root: ~/research-archive # kind: dir のときの置き場所（gdrive のときも、使えないときの退避先）
+  what: "集めた PDF・参考情報（URL・BibTeX・比較表）・研究メモ"
+  layout: "テーマ・プロジェクトごとのサブフォルダ。どれにも当たらないものは直下"
+  naming: "<題名>_YYYYMMDD（PDF は元のファイル名のまま）"
+
 robot:                    # 実機ロボット（なければ repo を空にする）
   repo: ""                # ドライバ・校正・道具を置いたリポジトリ（例: ~/so101）
   description: ""         # 例: SO-ARM101（リーダー・フォロワー）、LeRobot 0.5.x

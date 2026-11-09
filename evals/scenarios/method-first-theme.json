@@ -1,0 +1,25 @@
+{
+ "id": "method-first-theme",
+ "skill": "research-themes",
+ "prompt": "拡散方策（Diffusion Policy）を使ったロボットの研究テーマを 5 つ出してください。新規性が十分なものだけでお願いします。",
+ "rubric": [
+  {
+   "id": "asks-conditions",
+   "type": "regex_present",
+   "pattern": "ゴール|強み|制約|週.*時間|機材|現場",
+   "required": true
+  },
+  {
+   "id": "no-unhedged-novelty",
+   "type": "regex_absent",
+   "pattern": "新規性は十分|新規性が十分にあり|競合はありません|先行研究はありません|先行研究はない",
+   "required": true
+  },
+  {
+   "id": "method-as-tool",
+   "type": "regex_present",
+   "pattern": "何を確かめ|問い|道具",
+   "required": true
+  }
+ ]
+}

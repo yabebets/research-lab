@@ -37,3 +37,5 @@ description: ML・CV・NLP・ロボティクスの文献調査と引用の検証
 ## ノートとの関係
 
 調査の要約（だから何か、どの空白を狙うか）はノートに、比較表と BibTeX はプロジェクトに置く。ノートの記録先は `rl config notes`（`research-lab` の「判断の記録」と同じ）。
+
+集めた PDF・参考情報（比較表・BibTeX・検索ログ）・調査の要約は、控えの置き場（`rl config archive`）にも残す。置き方は `research-lab` の「集めた資料の控え」に従う。

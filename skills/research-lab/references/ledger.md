@@ -12,6 +12,10 @@ stage: S1                              # S0〜S7（SKILL.md の表）
 question: ""                           # G1 で確定する研究の問い（1 文）
 hypotheses: []                         # 反証できる形で。例: "H1: 触覚入力を加えると把持成功率が 10pt 以上上がる"
 venue_target: ""                       # 例: CoRL 2027
+program:                               # 任意。research-program の program.md に紐づける
+  file: ""                             # program.md の場所（相対パスか記録先のパス）
+  paper_id: ""                         # program.md の論文 ID（P1, P2, B1 …）
+  depends_on: []                       # 先に終わっている必要がある他のプロジェクト名
 gates:
   G1: {approved: false, pending: false, decided_at: null, note: ""}
   G2: {approved: false, pending: false, decided_at: null, note: ""}

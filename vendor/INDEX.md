@@ -5,7 +5,7 @@
 グローバルに登録しているのは `skills/` の自前スキルと research-paper-writing だけ。
 研究プロジェクトの中では、`rl new` が ARIS の主要スキルをプロジェクト用に登録する。
 
-## research-lab（自前）（6）
+## research-lab（自前）（8）
 
 - **gpu-cloud** — RunPod・Lambda の GPU を SkyPilot で立て、研究プロジェクトの予算の範囲で実験を回し、使い終わったら必ず消すためのスキル。費用の見積もり、G2 で承認した予算の確認、上限時間とアイドル時の自動削除、消し忘れの掃除（rl gpu reap）、ARIS の run-experiment（gpu: remote）との接続を扱う。トリガー例：「GPU で学習を回して」「RunPod で」「Lambda で」「費用を見積もって」「GPU が残っていないか確認して」「クラウドの GPU を片付けて」。  
   `skills/gpu-cloud/SKILL.md`
@@ -13,10 +13,14 @@
   `skills/ml-lit-review/SKILL.md`
 - **ml-rigor** — ML・CV・NLP・RL・ロボティクスの実験の厳密さを守るスキル。実験計画の事前登録（主指標・テストセット・seed 数・ベースラインの調整予算）、結果を良く見せる「分岐の庭」（seed 選び・チェックポイント選び・テストセットでの調整・ベンチマークの取捨・汚染）の検出、統計（seed 間の信頼区間、ペア比較、RL の IQM、実機の成功率の Wilson 区間と必要試行数）を scripts/rl_stats.py で機械的に計算する。トリガー例：「実験計画を立てて」「この結果は有意？」「seed は何個必要？」「ロボットの評価は何回やればいい？」「結果を盛っていないかチェックして」「主張を確定する前に監査して」。  
   `skills/ml-rigor/SKILL.md`
-- **physical-ai-research** — フィジカル AI・ロボティクス研究（模倣学習・VLA・強化学習・sim2real・操作・移動）を進めるスキル。LeRobot と SO-ARM101（~/hiwonder-SoArm-101）、MuJoCo / ManiSkill / Isaac Lab / LIBERO などのシミュレータとベンチマーク、方策（ACT・Diffusion Policy・SmolVLA・π0/openpi・OpenVLA-OFT・GR00T）の選び方、データ収録、実機評価のプロトコル（試行数・判定基準・順番）、実機の安全ルール、CoRL・RSS・ICRA・IROS 向けの書き方を扱う。トリガー例：「ロボットの研究テーマを考えて」「SO-101 で実験したい」「VLA を微調整したい」「sim2real」「実機評価の設計」「成功率を何回測ればいい？」。  
+- **physical-ai-research** — フィジカル AI・ロボティクス研究（模倣学習・VLA・強化学習・sim2real・操作・移動）を進めるスキル。LeRobot と SO-ARM101、MuJoCo / ManiSkill / Isaac Lab / LIBERO などのシミュレータとベンチマーク、方策（ACT・Diffusion Policy・SmolVLA・π0/openpi・OpenVLA-OFT・GR00T）の選び方、データ収録、実機評価のプロトコル（試行数・判定基準・順番）、実機の安全ルール、CoRL・RSS・ICRA・IROS 向けの書き方を扱う。トリガー例：「ロボットの研究テーマを考えて」「SO-101 で実験したい」「VLA を微調整したい」「sim2real」「実機評価の設計」「成功率を何回測ればいい？」。  
   `skills/physical-ai-research/SKILL.md`
 - **research-lab** — ML・CV・NLP・CS・AI・フィジカル AI・ロボティクスの研究を、テーマ選び→文献→実験計画→実験の実行→分析→論文→自己査読→投稿・rebuttal まで進めるときの入口と進行役。研究プロジェクトの台帳（research.yaml・claims.yaml・runs/）で状態を管理し、人の確認ポイント G1〜G4 以外は自律で進める。どの作業にどのスキル（自前・ARIS・Orchestra・Master-cai）を使うかもここで決める。トリガー例：「研究を始めたい」「このアイデアを論文にしたい」「研究プロジェクトを作って」「実験を回して」「夜の間に進めておいて」「次に何をやる？」「research-lab」。  
   `skills/research-lab/SKILL.md`
+- **research-program** — 大きな研究テーマ（1〜3 個）を、論文・研究プロジェクトの単位にどう切り分けて、どの順に進めるかを整理するスキル。幹（長期の問い）と論文の並び、各論文が答える 1 つの主張、論文の間の依存関係、積み上がる資産（データ・部品・ツール・評価手順）、投稿先と時期、潰れたときの逃げ道を notes/program.md にまとめ、research-lab のプロジェクト（1 プロジェクト = 1 論文）に対応づける。複数の興味を掛け合わせて 1 つの研究にするときの切り方も扱う。トリガー例：「研究プログラムを作って」「何本の論文に分ける？」「論文の順番を決めたい」「このテーマをプロジェクトに切って」「研究の全体像を整理して」「先を越されたので計画を組み直したい」。  
+  `skills/research-program/SKILL.md`
+- **research-themes** — 興味のある分野を人と話しながら、研究テーマの候補（3〜5 個）に落とし込むスキル。研究の問いの前の段階を受け持つ。手法ではなく、ゴール・強み・制約・現場への近さから出発し、興味どうしの交点を探して、テーマごとに「問い・なぜ今・空白の仮説・積み上がるもの・リスク・競合の感触」のカードにまとめる。トリガー例：「研究テーマを一緒に考えたい」「興味はあるが問いがない」「この分野で何をやればいい？」「ゼロベースで研究を考え直したい」「研究プログラムの前の相談」。  
+  `skills/research-themes/SKILL.md`
 - **venue-review** — 投稿先の学会の査読基準で原稿を査読シミュレーションし、直すべき点を優先度つきで出すスキル。NeurIPS・ICLR・ICML（ML）、CVPR・ICCV・ECCV（CV）、ACL・EMNLP・NAACL（ARR、NLP）、CoRL・RSS・ICRA・IROS・RA-L（ロボティクス）、MLSys・OSDI など（システム）の必須チェックリストと評価項目を扱い、別モデル（Codex）の査読と組み合わせる。トリガー例：「この論文を NeurIPS 基準で査読して」「CoRL に出せる？」「reviewer 目線で弱点を出して」「投稿前チェック」「rebuttal の準備」。  
   `skills/venue-review/SKILL.md`
 

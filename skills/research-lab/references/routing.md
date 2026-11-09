@@ -7,6 +7,8 @@
 
 | 作業 | スキル |
 |---|---|
+| 興味の範囲から研究テーマの候補を出す（問いの前） | ★ `research-themes`（条件を聞く → 棚卸し → 交点 → テーマのカード） |
+| テーマを論文・プロジェクトの単位に切る（幹・並び・依存・資産） | ★ `research-program`（`notes/program.md`。1 論文 = 1 プロジェクト） |
 | 文献を広く集めて整理する | ★ `ml-lit-review` → ◆ ARIS `research-lit`（arXiv / Semantic Scholar / OpenAlex） |
 | 1 本の論文をすばやく理解する | ◆ ARIS `alphaxiv`、`arxiv` |
 | アイデアを出す（ML 全般） | ◆ ARIS `idea-discovery` `idea-creator`、Orchestra `21-research-ideation/*` |
