@@ -1,6 +1,6 @@
 ---
 name: physical-ai-research
-description: フィジカル AI・ロボティクス研究（模倣学習・VLA・強化学習・sim2real・操作・移動）を進めるスキル。LeRobot と SO-ARM101（~/hiwonder-SoArm-101）、MuJoCo / ManiSkill / Isaac Lab / LIBERO などのシミュレータとベンチマーク、方策（ACT・Diffusion Policy・SmolVLA・π0/openpi・OpenVLA-OFT・GR00T）の選び方、データ収録、実機評価のプロトコル（試行数・判定基準・順番）、実機の安全ルール、CoRL・RSS・ICRA・IROS 向けの書き方を扱う。トリガー例：「ロボットの研究テーマを考えて」「SO-101 で実験したい」「VLA を微調整したい」「sim2real」「実機評価の設計」「成功率を何回測ればいい？」。
+description: フィジカル AI・ロボティクス研究（模倣学習・VLA・強化学習・sim2real・操作・移動）を進めるスキル。LeRobot と SO-ARM101、MuJoCo / ManiSkill / Isaac Lab / LIBERO などのシミュレータとベンチマーク、方策（ACT・Diffusion Policy・SmolVLA・π0/openpi・OpenVLA-OFT・GR00T）の選び方、データ収録、実機評価のプロトコル（試行数・判定基準・順番）、実機の安全ルール、CoRL・RSS・ICRA・IROS 向けの書き方を扱う。トリガー例：「ロボットの研究テーマを考えて」「SO-101 で実験したい」「VLA を微調整したい」「sim2real」「実機評価の設計」「成功率を何回測ればいい？」。
 ---
 
 # physical-ai-research — フィジカル AI・ロボティクス
@@ -12,17 +12,21 @@ description: フィジカル AI・ロボティクス研究（模倣学習・VLA�
 - **実機を動かすコマンドは、人がそばにいて、その場で「動かしてよい」と言ったときだけ実行する。** 夜間ループでは実機を動かさない（`rl night` は `lerobot-record` などを禁止している）。
 - 初めて動かす方策・設定は、まずシミュレーションで、次に実機で速度・トルクを落として 1 回、人が非常停止できる状態で。
 - 作業範囲に人の手や壊れ物がないこと、ケーブルが巻き込まれないことを毎回確認する。
-- SO-ARM101 の既知の注意：グリッパーの過負荷で ID 6 が応答しなくなることがある（`~/hiwonder-SoArm-101/notes/HANDOFF.md`）。実験の前に `notes/so101_tools/health.py` でサーボを確認する。
+- SO-ARM101 の既知の注意：グリッパーの過負荷で、モーター ID 6 が応答しなくなることがある。実験の前に、設定の `robot.health_check` でサーボを確認する（下の「手元の資産」）。
 
 ## 手元の資産
 
-| もの | 場所・状態 |
-|---|---|
-| SO-ARM101（リーダー・フォロワー）と LeRobot 0.5.1 | `~/hiwonder-SoArm-101`（HANDOFF.md が最新の状況） |
-| MuJoCo のシミュレーション（把持して置く課題、台本の専門家、データ収集・評価のスクリプト） | `~/hiwonder-SoArm-101/sim/`（`so101_env.py` `so101_expert.py` `collect_dataset.py` `eval_policy.py`） |
-| 実機データ・学習済みの ACT | 50 エピソード、Colab A100 で学習、実機で初成功（成功率の測定は途中） |
+手元のロボットは `rl config robot` で確認する（設定の書式は `config.example.yaml`）。
 
-研究プロジェクトのコードは `rl new` で作ったプロジェクトに置き、ロボットのドライバ・校正・道具は `~/hiwonder-SoArm-101` を参照する（コピーしない）。
+| 設定 | 中身 |
+|---|---|
+| `robot.repo` | ドライバ・校正・道具を置いたリポジトリ。空ならロボットなし（シミュレーションだけで進める） |
+| `robot.description` | 機種とソフトの版（例：SO-ARM101 のリーダー・フォロワー、LeRobot 0.5.x） |
+| `robot.status_doc` | 最新の状況を書いたメモ（`robot.repo` からの相対パス）。データ・学習済み方策・評価の進み具合はここを読む |
+| `robot.health_check` | 実験の前に `robot.repo` で実行するサーボの確認コマンド |
+| `robot.sim_dir` | シミュレーション（環境・台本の専門家・データ収集・評価のスクリプト） |
+
+研究プロジェクトのコードは `rl new` で作ったプロジェクトに置く。ロボットのドライバ・校正・道具は `robot.repo` を参照し、コピーしない。
 
 ## 研究の型と使う道具
 

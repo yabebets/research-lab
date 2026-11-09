@@ -93,6 +93,35 @@ def dump(data, path: Path) -> None:
     tmp.replace(path)
 
 
+def load_config() -> tuple[dict, Path]:
+    """手元の設定。config.yaml がなければ config.example.yaml（例の値）を使う。"""
+    for name in ("config.yaml", "config.example.yaml"):
+        p = RL / name
+        if p.exists():
+            with p.open() as f:
+                return (YAML(typ="safe").load(f) or {}), p
+    return {}, RL / "config.yaml"
+
+
+def cfg_get(cfg: dict, dotted: str, default=""):
+    cur = cfg
+    for k in dotted.split("."):
+        if not isinstance(cur, dict) or k not in cur:
+            return default
+        cur = cur[k]
+    return cur if cur is not None else default
+
+
+def local_section(cfg: dict) -> str:
+    lines = [f"- {cfg_get(cfg, 'compute.local', '手元のマシン: 小さな確認・シミュレーション・図')}"]
+    host, off = cfg_get(cfg, "compute.worker_host"), cfg_get(cfg, "compute.offload")
+    if host and off:
+        lines.append(f"- 重い CPU 処理は `{off} <cmd>` で {host} へ")
+    elif host:
+        lines.append(f"- 重い CPU 処理は `ssh {host}` で回す")
+    return "\n".join(lines)
+
+
 def add_log(led, by: str, what: str) -> None:
     if led.get("log") is None:
         led["log"] = []
@@ -107,11 +136,13 @@ def cmd_new(a):
     if target.exists():
         die(f"すでにあります: {target}")
     shutil.copytree(RL / "templates" / "project", target)
+    cfg, _ = load_config()
     for f in target.rglob("*"):
         if f.is_file() and f.suffix in {".md", ".yaml", ".json", ".gitignore"} or f.name == ".gitignore":
             s = f.read_text()
             s = (s.replace("{{PROJECT}}", a.name).replace("{{DOMAIN}}", a.domain)
-                  .replace("{{DATE}}", dt.date.today().isoformat()).replace("{{RL}}", str(RL)))
+                  .replace("{{DATE}}", dt.date.today().isoformat()).replace("{{RL}}", str(RL))
+                  .replace("{{LOCAL}}", local_section(cfg)))
             f.write_text(s)
     # ARIS の主要スキルをプロジェクトに登録（相対参照のため shared-references も）
     sk = target / ".claude" / "skills"
@@ -263,7 +294,27 @@ def cmd_doctor(a):
         link = CLAUDE_SKILLS / name
         line(f"skill {name}", link.exists(), "rl link で登録" if not link.exists() else "")
     line("rl コマンドが PATH にある", which("rl"), f"rl link で {LOCAL_BIN}/rl を作る" if not which("rl") else "")
+    _, cpath = load_config()
+    print(f"{'✓' if cpath.name == 'config.yaml' else '·'} 手元の設定: "
+          + (str(cpath) if cpath.name == "config.yaml" else "config.yaml がないので例の値を使用（cp config.example.yaml config.yaml）"))
     sys.exit(0 if ok else 1)
+
+
+# ---------------------------------------------------------------- config
+def cmd_config(a):
+    cfg, path = load_config()
+    if a.key:
+        v = cfg_get(cfg, a.key, None)
+        if v is None:
+            die(f"設定にありません: {a.key}")
+        if isinstance(v, (dict, list)):
+            YAML().dump(v, sys.stdout)
+        else:
+            print(os.path.expanduser(str(v)) if str(v).startswith("~") else v)
+        return
+    note = "" if path.name == "config.yaml" else "  ← config.yaml がないので例の値。cp config.example.yaml config.yaml で作る"
+    print(f"# {path}{note}")
+    YAML().dump(cfg, sys.stdout)
 
 
 # ---------------------------------------------------------------- link
@@ -505,6 +556,8 @@ def main():
     p = sub.add_parser("check"); p.add_argument("project", nargs="?"); p.set_defaults(fn=cmd_check)
     p = sub.add_parser("doctor"); p.add_argument("--clouds", action="store_true"); p.set_defaults(fn=cmd_doctor)
     p = sub.add_parser("link"); p.set_defaults(fn=cmd_link)
+    p = sub.add_parser("config", help="手元の設定（記録先・ロボット・計算環境）を表示"); p.add_argument("key", nargs="?", help="例: robot.repo")
+    p.set_defaults(fn=cmd_config)
     p = sub.add_parser("sync"); p.add_argument("names", nargs="*"); p.set_defaults(fn=cmd_sync)
     p = sub.add_parser("night"); p.add_argument("project", nargs="?")
     p.add_argument("--iterations", type=int, default=20); p.add_argument("--budget-usd", type=float)

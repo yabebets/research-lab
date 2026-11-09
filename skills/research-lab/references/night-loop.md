@@ -21,7 +21,7 @@ rl night <project> [--iterations 20] [--budget-usd 10] [--hours 8]
 ## どこで回すか
 
 - 手元の Mac で回すなら `caffeinate -i rl night ...`（スリープ防止）
-- 手元の Mac が重いときは dev-worker の tmux で回す（`ssh dev-worker`、`tmux new -s night`）。GPU の実験自体は RunPod / Lambda で動くので、ループ役はどこでもよい
+- 手元のマシンが重いときは、設定の `compute.worker_host`（`rl config compute.worker_host`）の tmux で回す（`ssh <host>`、`tmux new -s night`）。GPU の実験自体は RunPod / Lambda で動くので、ループ役はどこでもよい
 - GPU は `gpu-cloud` が上限時間と自動削除つきで立てる。ループが途中で落ちても、`rl gpu reap` が期限切れの GPU を消す
 
 ## 夜間ループでやらないこと

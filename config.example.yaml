@@ -1,0 +1,25 @@
+# research-lab の手元の設定（例）。
+# 使い方: cp config.example.yaml config.yaml して書き換える。config.yaml は git の管理外。
+# スキルは `rl config` の出力を見て、記録先・ロボット・計算環境を決める。
+
+notes:                    # 考えと判断の記録先（G1〜G4 を通るたびに書く）
+  kind: dir               # dir = 下の root に Markdown を直接書く / mcp = 下の mcp_tool を使う / none = 記録しない
+  mcp_tool: ""            # kind: mcp のときのツール名（例: Obsidian や社内 Wiki の MCP の書き込みツール）
+  root: ~/research-notes  # kind: dir のときの置き場所（mcp のときも、使えないときの退避先）
+  dirs:                   # root からの相対パス
+    robotics: robotics/decisions
+    robotics_outputs: robotics/outputs
+    default: research
+  conventions: "フロントマターに type: research、date、tags、status を入れる"
+
+robot:                    # 実機ロボット（なければ repo を空にする）
+  repo: ""                # ドライバ・校正・道具を置いたリポジトリ（例: ~/so101）
+  description: ""         # 例: SO-ARM101（リーダー・フォロワー）、LeRobot 0.5.x
+  status_doc: ""          # repo からの相対パス。最新の状況を書いたメモ（例: notes/HANDOFF.md）
+  health_check: ""        # 実験の前に repo で実行する確認コマンド
+  sim_dir: ""             # repo からの相対パス。MuJoCo などのシミュレーション
+
+compute:                  # 手元の計算環境（GPU のクラウドは skills/gpu-cloud）
+  local: "手元のマシン: 小さな確認・シミュレーション・図"
+  worker_host: ""         # 重い CPU 処理や夜間ループを任せる SSH 先（なければ空）
+  offload: ""             # 重い処理を worker に回すコマンドの前置き（例: "offload auto --"）

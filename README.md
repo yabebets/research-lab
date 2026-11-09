@@ -13,6 +13,7 @@ ML・CV・NLP・CS・AI・フィジカル AI・ロボティクスの研究を、
 
 ```bash
 ~/research-lab/bin/rl link        # 自前スキルを ~/.claude/skills に登録、rl を ~/.local/bin に
+cp config.example.yaml config.yaml  # 記録先・手元のロボット・計算環境を書く（git の管理外）
 rl doctor                         # 足りないものを表示
 ```
 
@@ -28,7 +29,7 @@ Codex を査読役にするので、`codex login` を済ませておく。
 5. **G3**：論文で言う主張を人が確定する → 執筆と査読シミュレーションのループ
 6. **G4**：投稿するかを人が決める
 
-研究のコードと原稿はプロジェクト（`projects/<名前>/`、それぞれ別の Git リポジトリ）に、判断と考えは Plexa の Vault（ロボティクスは `Exp Robotics/`、それ以外は `Research/`）に残す。
+研究のコードと原稿はプロジェクト（`projects/<名前>/`、それぞれ別の Git リポジトリ）に、判断と考えはノートに残す。記録先・手元のロボット・計算環境は `config.yaml` に書く（`cp config.example.yaml config.yaml` で作り、`rl config` で確認）。
 
 ## コマンド
 
@@ -40,6 +41,7 @@ Codex を査読役にするので、`codex login` を済ませておく。
 | `rl gpu up <name> <task.yaml> --hours H --usd-per-hour X` | GPU を立てる（G2・上限時間・残り予算を確認してから） |
 | `rl gpu down <name> <cluster>` / `rl gpu reap` / `rl gpu status` | 消す・期限切れを消す・一覧 |
 | `rl doctor [--clouds]` | ツール・接続の確認 |
+| `rl config [key]` | 手元の設定（記録先・ロボット・計算環境）を表示。例：`rl config robot.repo` |
 | `rl sync` | 上流スキルを更新し、索引を作り直す |
 
 ## 構成
@@ -62,6 +64,7 @@ vendor/                    上流（git subtree。手で直さない）
 templates/                 プロジェクトのひな形・夜間ループのプロンプト・SkyPilot のタスク
 evals/                     スキルの評価ハーネス（run_evals.py）
 bin/rl                     操作コマンド
+config.example.yaml        手元の設定の例（コピーして config.yaml にする。config.yaml は管理外）
 scripts/                   vendor-sync.sh・build-index.py
 projects/                  研究プロジェクト（このリポジトリでは管理しない）
 ```

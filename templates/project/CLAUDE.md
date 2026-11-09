@@ -21,5 +21,4 @@
 - wandb: false
 
 ## Local
-- 手元の Mac（M1 Max, MPS）: 小さな確認・シミュレーション・図
-- 重い CPU 処理は `offload auto -- <cmd>` で dev-worker へ
+{{LOCAL}}

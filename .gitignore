@@ -11,3 +11,5 @@ __pycache__/
 .env
 .venv/
 evals/results/
+# 手元の設定（config.example.yaml をコピーして作る）
+config.yaml

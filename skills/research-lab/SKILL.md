@@ -87,13 +87,13 @@ rl doctor                           # ツール・GPU クラウド・Codex 査�
 
 ARIS の `auto-review-loop`・`experiment-queue` などは中に自分のループを持っている。これらを夜間ループの中で何度も最初から呼び直さない（ARIS の `external-cadence.md` の決まり）。夜間ループは「終わったか」を見て次の段階へ進めるだけにする。
 
-## Vault への記録
+## 判断の記録
 
-G1〜G4 を通るたび、判断の記録を Plexa の Vault に残す（研究のコードと原稿はプロジェクトに、考えと判断は Vault に）。
+G1〜G4 を通るたび、判断の記録をノートに残す。研究のコードと原稿はプロジェクトに、考えと判断はノートに置く。記録先は `rl config notes` で確認する（書式は `config.example.yaml`）。
 
-- ロボティクス・フィジカル AI → `Exp Robotics/2_Research/`（判断の記録）と `Exp Robotics/5_Outputs/`（論文・発表）
-- それ以外 → `Research/`
-- Plexa MCP の `vault_write` を優先し、使えなければ `~/plexa/vault/Knowledge/` に直接書く。フロントマターと命名は Vault の `CLAUDE.md` に従う（`type: research`、`date`、`tags`、`status`）。
+- 置き場所：ロボティクス・フィジカル AI は `notes.dirs.robotics`（判断の記録）と `notes.dirs.robotics_outputs`（論文・発表）。それ以外は `notes.dirs.default`
+- 書き方：`notes.kind: mcp` なら `notes.mcp_tool` で書く。使えないとき、または `kind: dir` のときは、`notes.root` の下に Markdown を直接書く。`kind: none` なら記録しない
+- フロントマターと命名は `notes.conventions` に従う
 
 ## 毎回の始め方（チェックリスト）
 

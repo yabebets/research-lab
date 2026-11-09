@@ -34,6 +34,6 @@ description: ML・CV・NLP・ロボティクスの文献調査と引用の検証
 - 「初めて」「唯一」と書く前に `novelty-check` を通し、検索した範囲（データベース・キーワード・日付）を `notes/literature/search-log.md` に残す。
 - 出版の前に、新しく出た論文がないか最後にもう一度だけ検索する（arXiv は毎日増える）。
 
-## Vault との関係
+## ノートとの関係
 
-調査の要約（だから何か、どの空白を狙うか）は Vault に、比較表と BibTeX はプロジェクトに。ロボティクスは `Exp Robotics/2_Research/`、それ以外は `Research/`。
+調査の要約（だから何か、どの空白を狙うか）はノートに、比較表と BibTeX はプロジェクトに置く。ノートの記録先は `rl config notes`（`research-lab` の「判断の記録」と同じ）。
