@@ -1,0 +1,22 @@
+# SkyPilot のタスク定義（rl gpu up <project> templates/sky/train.yaml --hours H --usd-per-hour X）
+# infra は runpod か lambda。accelerators は候補を並べると安い方を選ぶ。
+name: rl-train
+
+resources:
+  infra: runpod            # lambda にするなら lambda
+  accelerators: {A100-80GB: 1, H100: 1}
+  disk_size: 200
+
+workdir: .                 # プロジェクトを ~/sky_workdir に同期する（.gitignore の対象は送らない）
+
+envs:
+  MAX_HOURS: 4             # rl gpu up が --hours で上書きする
+  CONFIG: configs/base.yaml
+
+setup: |
+  pip install -q uv
+  uv sync || pip install -q -r requirements.txt
+
+run: |
+  # 上限時間で必ず止める（止まればアイドル扱いになり、--down で自動削除される）
+  timeout "${MAX_HOURS}h" python -m src.train --config "$CONFIG"

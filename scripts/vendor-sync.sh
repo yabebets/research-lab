@@ -37,10 +37,10 @@ while IFS=$'\t' read -r name url branch src dest; do
   upstream_head="$(git -C "$repo" rev-parse --short "$branch")"
   if [ -d "$dest" ]; then
     git subtree pull -q --prefix="$dest" "$repo" "rl-split/$name" \
-      -m "vendor: update $name from $(basename "$url" .git)@$upstream_head"
+      -m "vendor: update $name from $(basename "$url" .git)@$upstream_head" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   else
     git subtree add -q --prefix="$dest" "$repo" "rl-split/$name" \
-      -m "vendor: add $name from $(basename "$url" .git)@$upstream_head ($src)"
+      -m "vendor: add $name from $(basename "$url" .git)@$upstream_head ($src)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   fi
 done < vendor/manifest.tsv
 

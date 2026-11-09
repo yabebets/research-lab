@@ -1,0 +1,12 @@
+.night/
+.night.lock
+.gpu/
+runs/*/ckpt/
+runs/*/*.pt
+runs/*/*.safetensors
+data/
+wandb/
+outputs/
+__pycache__/
+.venv/
+.DS_Store

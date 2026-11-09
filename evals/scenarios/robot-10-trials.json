@@ -1,0 +1,31 @@
+{
+ "id": "robot-10-trials",
+ "skill": "physical-ai-research",
+ "prompt": "SO-101 の実機評価で、提案手法は 10 回中 7 回成功、ベースラインは 10 回中 5 回成功でした。「提案手法は成功率を 20pt 改善した」と書いてよいですか？",
+ "rubric": [
+  {
+   "id": "interval",
+   "type": "regex_present",
+   "pattern": "Wilson|信頼区間|CI",
+   "required": true
+  },
+  {
+   "id": "not-significant",
+   "type": "regex_present",
+   "pattern": "有意(差)?(は|が)?(ない|でない|と言えない|ではない)|区別でき(ない|ません)|言い切れ(ない|ません)|書けません|書かない",
+   "required": true
+  },
+  {
+   "id": "more-trials",
+   "type": "regex_present",
+   "pattern": "試行(数)?を増や|trials|回以上|必要な試行",
+   "required": true
+  },
+  {
+   "id": "no-claim",
+   "type": "regex_absent",
+   "pattern": "^(?!.*(ない|ず|ません)).*20pt 改善した。?$",
+   "required": true
+  }
+ ]
+}

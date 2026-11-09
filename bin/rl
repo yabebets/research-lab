@@ -1,0 +1,528 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["ruamel.yaml>=0.18"]
+# ///
+"""rl — research-lab の操作コマンド
+
+  rl new <name> [--domain ml|cv|nlp|robotics|systems] [--path DIR]   研究プロジェクトを作る
+  rl status [name|path]                                               台帳の要約
+  rl check [name|path]                                                台帳の書式の確認
+  rl doctor [--clouds]                                                ツール・接続の確認
+  rl link                                                             スキルを ~/.claude/skills に登録
+  rl sync                                                             上流スキルの更新と索引の再生成
+  rl night <name|path> [--iterations N] [--budget-usd X] [--hours H]  夜間ループ
+  rl gpu up <name|path> <task.yaml> --hours H --usd-per-hour X [--idle M] [--cluster C]
+  rl gpu down <name|path> <cluster>
+  rl gpu reap                                                         上限時間を過ぎた GPU を消す
+  rl gpu status
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from ruamel.yaml import YAML
+
+RL = Path(__file__).resolve().parent.parent
+PROJECTS = RL / "projects"
+ARIS = RL / "vendor" / "aris"
+CLAUDE_SKILLS = Path.home() / ".claude" / "skills"
+LOCAL_BIN = Path.home() / ".local" / "bin"
+
+# 研究プロジェクトの .claude/skills/ に登録する ARIS のスキル（研究の主な流れで使うもの）
+ARIS_CORE = """
+research-pipeline idea-discovery idea-discovery-robot idea-creator novelty-check kill-argument
+research-lit arxiv semantic-scholar openalex alphaxiv research-review research-refine
+research-refine-pipeline experiment-plan ablation-planner experiment-bridge research-implement-feature
+run-experiment experiment-queue monitor-experiment training-check analyze-results result-to-claim
+experiment-audit integrity-forensics auto-review-loop auto-paper-improvement-loop paper-plan
+paper-write paper-writing paper-figure paper-compile paper-claim-audit citation-audit
+citation-crosscheck formula-derivation proof-checker writing-systems-papers paper-slides
+paper-poster-html mermaid-diagram rebuttal resubmit-pipeline research-wiki system-profile
+""".split()
+
+DOMAINS = ["ml", "cv", "nlp", "robotics", "systems"]
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+
+
+def now() -> str:
+    return dt.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def die(msg: str) -> None:
+    print(f"rl: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def resolve_project(ref: str | None) -> Path:
+    if ref is None:
+        p = Path.cwd()
+        while p != p.parent:
+            if (p / "research.yaml").exists():
+                return p
+            p = p.parent
+        die("研究プロジェクトの中で実行するか、名前かパスを指定してください")
+    cand = Path(ref).expanduser()
+    if (cand / "research.yaml").exists():
+        return cand.resolve()
+    if (PROJECTS / ref / "research.yaml").exists():
+        return PROJECTS / ref
+    die(f"プロジェクトが見つかりません: {ref}")
+
+
+def load(path: Path):
+    with path.open() as f:
+        return yaml.load(f)
+
+
+def dump(data, path: Path) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w") as f:
+        yaml.dump(data, f)
+    tmp.replace(path)
+
+
+def add_log(led, by: str, what: str) -> None:
+    if led.get("log") is None:
+        led["log"] = []
+    led["log"].append({"at": now(), "by": by, "what": what})
+
+
+# ---------------------------------------------------------------- new
+def cmd_new(a):
+    if a.domain not in DOMAINS:
+        die(f"--domain は {DOMAINS} のどれか")
+    target = Path(a.path).expanduser() / a.name if a.path else PROJECTS / a.name
+    if target.exists():
+        die(f"すでにあります: {target}")
+    shutil.copytree(RL / "templates" / "project", target)
+    for f in target.rglob("*"):
+        if f.is_file() and f.suffix in {".md", ".yaml", ".json", ".gitignore"} or f.name == ".gitignore":
+            s = f.read_text()
+            s = (s.replace("{{PROJECT}}", a.name).replace("{{DOMAIN}}", a.domain)
+                  .replace("{{DATE}}", dt.date.today().isoformat()).replace("{{RL}}", str(RL)))
+            f.write_text(s)
+    # ARIS の主要スキルをプロジェクトに登録（相対参照のため shared-references も）
+    sk = target / ".claude" / "skills"
+    sk.mkdir(parents=True, exist_ok=True)
+    missing = []
+    for name in ARIS_CORE + ["shared-references"]:
+        src = ARIS / "skills" / name
+        if src.exists():
+            (sk / name).symlink_to(src)
+        else:
+            missing.append(name)
+    settings = {"env": {"ARIS_REPO": str(ARIS), "RL_HOME": str(RL)}}
+    (target / ".claude" / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
+    mcp = {"mcpServers": {"codex": {"command": "python3", "args": [str(ARIS / "mcp-servers" / "codex-exec" / "server.py")]}}}
+    (target / ".mcp.json").write_text(json.dumps(mcp, indent=2) + "\n")
+    for d in ("runs", "src", "configs", "paper", "notes", ".gpu"):
+        (target / d).mkdir(exist_ok=True)
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=target, check=True)
+    print(f"作成しました: {target}")
+    print(f"  ARIS スキル {len(ARIS_CORE) - len(missing)} 個をプロジェクトに登録" + (f"（見つからない: {missing}）" if missing else ""))
+    print("  次: cd して Claude Code を開き「research-lab で S1 から始めて」と頼む")
+
+
+# ---------------------------------------------------------------- status
+def count_runs(proj: Path):
+    runs = sorted((proj / "runs").glob("run_*"))
+    by = {}
+    test_evals = 0
+    for r in runs:
+        st = (r / "status").read_text().strip() if (r / "status").exists() else "?"
+        by[st] = by.get(st, 0) + 1
+        m = r / "metrics.json"
+        if m.exists():
+            try:
+                if json.loads(m.read_text()).get("split") == "test":
+                    test_evals += 1
+            except json.JSONDecodeError:
+                pass
+    return runs, by, test_evals
+
+
+def active_clusters(proj: Path):
+    f = proj / ".gpu" / "clusters.json"
+    data = json.loads(f.read_text()) if f.exists() else []
+    return data, [c for c in data if c.get("state") == "up"]
+
+
+def cmd_status(a):
+    proj = resolve_project(a.project)
+    led = load(proj / "research.yaml")
+    print(f"# {led.get('project')}  ({led.get('domain')})  stage={led.get('stage')}")
+    if led.get("question"):
+        print(f"問い: {led['question']}")
+    gates = led.get("gates") or {}
+    print("ゲート: " + "  ".join(
+        f"{g}:{'✓' if v.get('approved') else ('待ち' if v.get('pending') else '-')}" for g, v in gates.items()))
+    b = led.get("budget") or {}
+    print(f"GPU 予算: ${b.get('gpu_usd_spent', 0)} / ${b.get('gpu_usd', 0)}   1 回の上限: {b.get('max_run_hours')}h")
+    runs, by, test_evals = count_runs(proj)
+    print(f"実行: {len(runs)} 件 {by}   test での評価: {test_evals} 回")
+    _, up = active_clusters(proj)
+    for c in up:
+        el = (time.time() - c["started_ts"]) / 3600
+        print(f"GPU 稼働中: {c['cluster']}  {el:.1f}h / 上限 {c['max_hours']}h  ${c['usd_per_hour']}/h")
+    tasks = [t for t in (led.get("tasks") or []) if t.get("status") != "done"]
+    print(f"未完了のタスク: {len(tasks)}")
+    for t in tasks[:8]:
+        print(f"  - [{t.get('status')}] {t.get('id')} {t.get('title')}")
+    for bl in led.get("blockers") or []:
+        print(f"⚠ blocker: {bl.get('reason')}  (needs: {bl.get('needs')})")
+    claims = proj / "claims.yaml"
+    if claims.exists():
+        cl = load(claims).get("claims") or []
+        st = {}
+        for c in cl:
+            st[c.get("status")] = st.get(c.get("status"), 0) + 1
+        print(f"主張: {st}")
+
+
+# ---------------------------------------------------------------- check
+def ledger_errors(proj: Path) -> list[str]:
+    errs = []
+    try:
+        led = load(proj / "research.yaml")
+    except Exception as e:  # noqa: BLE001
+        return [f"research.yaml が読めません: {e}"]
+    for k in ("project", "stage", "gates", "budget", "protocol", "tasks", "blockers", "log"):
+        if k not in led:
+            errs.append(f"research.yaml に {k} がありません")
+    if str(led.get("stage")) not in [f"S{i}" for i in range(8)]:
+        errs.append(f"stage が S0〜S7 ではありません: {led.get('stage')}")
+    for g in ("G1", "G2", "G3", "G4"):
+        if g not in (led.get("gates") or {}):
+            errs.append(f"gates に {g} がありません")
+    ids = [t.get("id") for t in (led.get("tasks") or [])]
+    if len(ids) != len(set(ids)):
+        errs.append("tasks の id が重複しています")
+    for t in led.get("tasks") or []:
+        if t.get("status") not in ("open", "doing", "done", "blocked"):
+            errs.append(f"{t.get('id')}: status が不正 {t.get('status')}")
+        for d in t.get("depends_on") or []:
+            if d not in ids:
+                errs.append(f"{t.get('id')}: depends_on の {d} がありません")
+    cf = proj / "claims.yaml"
+    if cf.exists():
+        try:
+            cl = load(cf) or {}
+        except Exception as e:  # noqa: BLE001
+            return errs + [f"claims.yaml が読めません: {e}"]
+        for c in cl.get("claims") or []:
+            for r in c.get("evidence") or []:
+                if not (proj / "runs" / r).exists():
+                    errs.append(f"{c.get('id')}: 証拠の {r} が runs/ にありません")
+            if c.get("status") == "frozen" and not (led.get("gates") or {}).get("G3", {}).get("approved"):
+                errs.append(f"{c.get('id')}: G3 の承認前に frozen になっています")
+    return errs
+
+
+def cmd_check(a):
+    proj = resolve_project(a.project)
+    errs = ledger_errors(proj)
+    for e in errs:
+        print(f"✗ {e}")
+    print("✓ 台帳は正しく読めます" if not errs else f"{len(errs)} 件の問題")
+    sys.exit(1 if errs else 0)
+
+
+# ---------------------------------------------------------------- doctor
+def which(cmd):
+    return shutil.which(cmd)
+
+
+def cmd_doctor(a):
+    ok = True
+    def line(name, good, note=""):
+        nonlocal ok
+        ok &= bool(good)
+        print(f"{'✓' if good else '✗'} {name}{('  — ' + note) if note else ''}")
+    for c in ("git", "uv", "claude", "python3"):
+        line(c, which(c))
+    line("codex（査読役）", which("codex"), "brew install codex / codex login" if not which("codex") else "")
+    line("ARIS codex MCP サーバー", (ARIS / "mcp-servers" / "codex-exec" / "server.py").exists())
+    sky = which("sky")
+    line("SkyPilot (sky)", sky, "" if sky else "uv tool install 'skypilot[runpod,lambda]' → 認証は skills/gpu-cloud/SKILL.md")
+    if sky and a.clouds:
+        r = subprocess.run(["sky", "check", "runpod", "lambda"], capture_output=True, text=True)
+        print(r.stdout[-1500:] or r.stderr[-1500:])
+    for name in [p.name for p in (RL / "skills").iterdir() if (p / "SKILL.md").exists()]:
+        link = CLAUDE_SKILLS / name
+        line(f"skill {name}", link.exists(), "rl link で登録" if not link.exists() else "")
+    line("rl コマンドが PATH にある", which("rl"), f"rl link で {LOCAL_BIN}/rl を作る" if not which("rl") else "")
+    sys.exit(0 if ok else 1)
+
+
+# ---------------------------------------------------------------- link
+def cmd_link(a):
+    CLAUDE_SKILLS.mkdir(parents=True, exist_ok=True)
+    for p in sorted((RL / "skills").iterdir()):
+        if not (p / "SKILL.md").exists():
+            continue
+        dst = CLAUDE_SKILLS / p.name
+        if dst.is_symlink() or dst.exists():
+            if dst.is_symlink() and dst.resolve() == p.resolve():
+                print(f"= {p.name}")
+                continue
+            print(f"! {p.name}: {dst} が既にあるので飛ばしました（中身を確認してください）")
+            continue
+        dst.symlink_to(p)
+        print(f"+ {p.name} → {p}")
+    LOCAL_BIN.mkdir(parents=True, exist_ok=True)
+    rl_link = LOCAL_BIN / "rl"
+    if not rl_link.exists():
+        rl_link.symlink_to(RL / "bin" / "rl")
+        print(f"+ {rl_link}")
+
+
+# ---------------------------------------------------------------- sync
+def cmd_sync(a):
+    subprocess.run([str(RL / "scripts" / "vendor-sync.sh"), *a.names], check=True)
+    subprocess.run([sys.executable, str(RL / "scripts" / "build-index.py")], check=True)
+
+
+# ---------------------------------------------------------------- night
+NIGHT_ALLOWED = [
+    "Read", "Edit", "Write", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite", "Skill",
+    "mcp__codex__codex", "mcp__codex__codex-reply",
+    "Bash(python3:*)", "Bash(python:*)", "Bash(uv:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)",
+    "Bash(wc:*)", "Bash(grep:*)", "Bash(find:*)", "Bash(mkdir:*)", "Bash(cp:*)", "Bash(mv:*)",
+    "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)",
+    "Bash(git rev-parse:*)", "Bash(ssh:*)", "Bash(rsync:*)", "Bash(scp:*)",
+    "Bash(rl status:*)", "Bash(rl check:*)", "Bash(rl gpu:*)", "Bash(sky status:*)", "Bash(sky logs:*)", "Bash(sky queue:*)",
+    "Bash(sky exec:*)", "Bash(latexmk:*)", "Bash(pdflatex:*)", "Bash(bibtex:*)",
+]
+NIGHT_DENIED = [
+    "Bash(git push:*)", "Bash(rm -rf:*)", "Bash(sky launch:*)", "Bash(sky down:*)",
+    "Bash(lerobot-record:*)", "Bash(lerobot-teleoperate:*)", "Bash(lerobot-replay:*)",
+    "Bash(curl:*)", "Bash(gh:*)",
+]
+
+
+def ledger_snapshot(proj: Path):
+    led = load(proj / "research.yaml")
+    pend = [g for g, v in (led.get("gates") or {}).items() if v.get("pending")]
+    blockers = len(led.get("blockers") or [])
+    open_tasks = [t for t in (led.get("tasks") or []) if t.get("status") in ("open", "doing")]
+    return led, pend, blockers, open_tasks
+
+
+def cmd_night(a):
+    proj = resolve_project(a.project)
+    lock = proj / ".night.lock"
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+    except FileExistsError:
+        die(f"夜間ループが既に動いています（{lock}）。止まっているなら消してください")
+    outdir = proj / ".night" / dt.datetime.now().strftime("%Y%m%d-%H%M")
+    outdir.mkdir(parents=True, exist_ok=True)
+    prompt = (RL / "templates" / "night-prompt.md").read_text()
+    deadline = time.time() + a.hours * 3600
+    spent = 0.0
+    summary = [f"# 夜間ループ {outdir.name}", f"上限: {a.iterations} 回 / ${a.budget_usd} / {a.hours}h", ""]
+    reason = "回数の上限"
+    try:
+        _, pend0, blockers0, _ = ledger_snapshot(proj)
+        if pend0:
+            reason = f"開始前から人の判断待ち: {pend0}"
+            a.iterations = 0
+        for i in range(1, a.iterations + 1):
+            remaining = a.budget_usd - spent
+            if remaining < 0.5:
+                reason = "費用の上限"
+                break
+            if time.time() > deadline:
+                reason = "時間の上限"
+                break
+            per_iter = min(a.per_iter_usd, remaining)
+            gates_before = {g: bool(v.get("approved")) for g, v in (load(proj / "research.yaml").get("gates") or {}).items()}
+            cmd = ["claude", "-p", prompt, "--output-format", "json", "--permission-mode", "dontAsk",
+                   "--max-budget-usd", f"{per_iter:.2f}",
+                   "--allowedTools", *NIGHT_ALLOWED, "--disallowedTools", *NIGHT_DENIED]
+            t0 = time.time()
+            try:
+                r = subprocess.run(cmd, cwd=proj, capture_output=True, text=True, env={**os.environ, "RL_NIGHT": "1"},
+                                   timeout=min(a.iter_minutes * 60, max(60, deadline - time.time())))
+                out = r.stdout
+            except subprocess.TimeoutExpired as e:
+                out = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+                out += "\n[rl night] この回は時間切れで打ち切り"
+            (outdir / f"iter-{i:02d}.log").write_text(out)
+            cost, result = 0.0, ""
+            try:
+                j = json.loads(out.strip().splitlines()[-1]) if out.strip() else {}
+                cost = float(j.get("total_cost_usd") or 0)
+                result = (j.get("result") or "")[:600]
+            except (json.JSONDecodeError, ValueError, IndexError):
+                result = out[-600:]
+            spent += cost
+            summary += [f"## {i}回目（{(time.time() - t0) / 60:.0f} 分・${cost:.2f}）", result, ""]
+            # GPU の消し忘れ防止
+            subprocess.run([str(RL / "bin" / "rl"), "gpu", "reap"], capture_output=True)
+            if ledger_errors(proj):
+                reason = "台帳が壊れた（rl check で確認）"
+                break
+            led = load(proj / "research.yaml")
+            flipped = [g for g, v in (led.get("gates") or {}).items() if v.get("approved") and not gates_before.get(g)]
+            if flipped:
+                for g in flipped:
+                    led["gates"][g]["approved"] = False
+                led.setdefault("blockers", []).append({"at": now(), "reason": f"夜間ループが {flipped} を承認に変えたので戻した（承認は人だけ）", "needs": "human"})
+                dump(led, proj / "research.yaml")
+                reason = f"ゲートの無断承認を検知して戻した: {flipped}"
+                break
+            led, pend, blockers, open_tasks = ledger_snapshot(proj)
+            if pend:
+                reason = f"人の判断待ち: {pend}"
+                break
+            if blockers > blockers0:
+                reason = "blocker が増えた"
+                break
+            if not open_tasks:
+                reason = "未完了のタスクがない"
+                break
+        led = load(proj / "research.yaml")
+        add_log(led, "night-loop", f"{outdir.name}: 終了（{reason}）、費用 ${spent:.2f}")
+        dump(led, proj / "research.yaml")
+    finally:
+        lock.unlink(missing_ok=True)
+        summary.insert(2, f"**終了理由: {reason}**　合計 ${spent:.2f}")
+        (outdir / "summary.md").write_text("\n".join(summary))
+    print(f"終了: {reason}  合計 ${spent:.2f}  → {outdir / 'summary.md'}")
+
+
+# ---------------------------------------------------------------- gpu
+def save_clusters(proj: Path, data):
+    (proj / ".gpu").mkdir(exist_ok=True)
+    (proj / ".gpu" / "clusters.json").write_text(json.dumps(data, indent=1, ensure_ascii=False))
+
+
+def cmd_gpu_up(a):
+    if not which("sky"):
+        die("SkyPilot がありません: uv tool install 'skypilot[runpod,lambda]'")
+    proj = resolve_project(a.project)
+    led = load(proj / "research.yaml")
+    if not (led.get("gates") or {}).get("G2", {}).get("approved"):
+        die("G2（計画と予算の承認）が済んでいません。GPU は承認後に立てます")
+    b = led.get("budget") or {}
+    if a.hours > float(b.get("max_run_hours") or 0):
+        die(f"--hours {a.hours} が 1 回の上限 {b.get('max_run_hours')}h を超えています")
+    data, up = active_clusters(proj)
+    committed = sum(c["usd_per_hour"] * c["max_hours"] for c in up)
+    est = a.usd_per_hour * a.hours
+    remaining = float(b.get("gpu_usd") or 0) - float(b.get("gpu_usd_spent") or 0) - committed
+    if est > remaining:
+        die(f"予算が足りません: 見積もり ${est:.2f} > 残り ${remaining:.2f}（稼働中の分を差し引き済み）")
+    if float(b.get("gpu_usd_spent") or 0) + committed + est > 0.8 * float(b.get("gpu_usd") or 0):
+        if os.environ.get("RL_NIGHT") == "1":
+            die("この実行で GPU 予算の 80% を超えます。夜間ループでは立てません（blockers に書いて止まってください）")
+        print("⚠ この実行で GPU 予算の 80% を超えます", file=sys.stderr)
+    cluster = a.cluster or f"rl-{led.get('project')}-{dt.datetime.now().strftime('%m%d%H%M')}"[:40]
+    cmd = ["sky", "launch", "-y", "-c", cluster, "--down", "-i", str(a.idle), "--env", f"MAX_HOURS={a.hours}", a.task]
+    print(" ".join(cmd), flush=True)
+    entry = {"cluster": cluster, "task": a.task, "usd_per_hour": a.usd_per_hour, "max_hours": a.hours,
+             "started_ts": time.time(), "started": now(), "state": "up"}
+    data.append(entry)
+    save_clusters(proj, data)  # 先に記録（launch が途中で落ちても reap で拾う）
+    r = subprocess.run(cmd, cwd=proj)
+    if r.returncode != 0:
+        print("sky launch が失敗しました。残っていれば reap で消します", file=sys.stderr)
+    add_log(led, "rl gpu", f"up {cluster} {a.task} ≤{a.hours}h ${a.usd_per_hour}/h")
+    dump(led, proj / "research.yaml")
+    print(f"SSH: ssh {cluster}   作業ディレクトリ: ~/sky_workdir")
+
+
+def _down(proj: Path, cluster: str, why: str):
+    subprocess.run(["sky", "down", "-y", cluster])
+    data, _ = active_clusters(proj)
+    led = load(proj / "research.yaml")
+    for c in data:
+        if c["cluster"] == cluster and c.get("state") == "up":
+            hours = min((time.time() - c["started_ts"]) / 3600, c["max_hours"] + 0.25)
+            c.update(state="down", ended=now(), hours=round(hours, 3), usd=round(hours * c["usd_per_hour"], 2))
+            b = led.setdefault("budget", {})
+            b["gpu_usd_spent"] = round(float(b.get("gpu_usd_spent") or 0) + c["usd"], 2)
+            add_log(led, "rl gpu", f"down {cluster}（{why}）{c['hours']}h ${c['usd']}（概算）")
+    save_clusters(proj, data)
+    dump(led, proj / "research.yaml")
+
+
+def cmd_gpu_down(a):
+    _down(resolve_project(a.project), a.cluster, "手動")
+
+
+def all_projects():
+    for p in PROJECTS.glob("*/research.yaml"):
+        yield p.parent
+    extra = RL / ".cache" / "external-projects.txt"
+    if extra.exists():
+        for line in extra.read_text().splitlines():
+            if line.strip() and (Path(line) / "research.yaml").exists():
+                yield Path(line)
+
+
+def cmd_gpu_reap(a):
+    for proj in all_projects():
+        _, up = active_clusters(proj)
+        for c in up:
+            if (time.time() - c["started_ts"]) / 3600 > c["max_hours"]:
+                print(f"上限時間を過ぎたので消します: {c['cluster']}（{proj.name}）")
+                _down(proj, c["cluster"], "上限時間")
+
+
+def cmd_gpu_status(a):
+    for proj in all_projects():
+        _, up = active_clusters(proj)
+        for c in up:
+            el = (time.time() - c["started_ts"]) / 3600
+            print(f"{proj.name}\t{c['cluster']}\t{el:.1f}h/{c['max_hours']}h\t${c['usd_per_hour']}/h")
+    if which("sky"):
+        subprocess.run(["sky", "status"])
+
+
+# ---------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(prog="rl", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("new"); p.add_argument("name"); p.add_argument("--domain", default="ml"); p.add_argument("--path")
+    p.set_defaults(fn=cmd_new)
+    p = sub.add_parser("status"); p.add_argument("project", nargs="?"); p.set_defaults(fn=cmd_status)
+    p = sub.add_parser("check"); p.add_argument("project", nargs="?"); p.set_defaults(fn=cmd_check)
+    p = sub.add_parser("doctor"); p.add_argument("--clouds", action="store_true"); p.set_defaults(fn=cmd_doctor)
+    p = sub.add_parser("link"); p.set_defaults(fn=cmd_link)
+    p = sub.add_parser("sync"); p.add_argument("names", nargs="*"); p.set_defaults(fn=cmd_sync)
+    p = sub.add_parser("night"); p.add_argument("project", nargs="?")
+    p.add_argument("--iterations", type=int, default=20); p.add_argument("--budget-usd", type=float)
+    p.add_argument("--per-iter-usd", type=float, default=3.0); p.add_argument("--iter-minutes", type=int, default=90)
+    p.add_argument("--hours", type=float, default=8); p.set_defaults(fn=cmd_night)
+    g = sub.add_parser("gpu").add_subparsers(dest="gcmd", required=True)
+    p = g.add_parser("up"); p.add_argument("project"); p.add_argument("task")
+    p.add_argument("--hours", type=float, required=True); p.add_argument("--usd-per-hour", type=float, required=True)
+    p.add_argument("--idle", type=int, default=30); p.add_argument("--cluster"); p.set_defaults(fn=cmd_gpu_up)
+    p = g.add_parser("down"); p.add_argument("project"); p.add_argument("cluster"); p.set_defaults(fn=cmd_gpu_down)
+    p = g.add_parser("reap"); p.set_defaults(fn=cmd_gpu_reap)
+    p = g.add_parser("status"); p.set_defaults(fn=cmd_gpu_status)
+    a = ap.parse_args()
+    if a.cmd == "night" and a.budget_usd is None:
+        led = load(resolve_project(a.project) / "research.yaml")
+        a.budget_usd = float((led.get("budget") or {}).get("llm_usd_per_night") or 10)
+    a.fn(a)
+
+
+if __name__ == "__main__":
+    main()

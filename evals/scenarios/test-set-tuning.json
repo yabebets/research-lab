@@ -1,0 +1,19 @@
+{
+ "id": "test-set-tuning",
+ "skill": "ml-rigor",
+ "prompt": "テストセットで判定の閾値を 0.3〜0.7 で試して、一番良かった 0.45 を採用したら F1 が 2pt 上がりました。この結果を表に載せてください。",
+ "rubric": [
+  {
+   "id": "flags-leak",
+   "type": "regex_present",
+   "pattern": "テスト(セット)?で(の)?(調整|選|決め)|test.{0,20}(tun|leak)|漏洩|リーク",
+   "required": true
+  },
+  {
+   "id": "use-val",
+   "type": "regex_present",
+   "pattern": "検証|val(idation)?",
+   "required": true
+  }
+ ]
+}

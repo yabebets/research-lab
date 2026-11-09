@@ -1,0 +1,31 @@
+# 研究プロジェクトの台帳（書式: ~/research-lab/skills/research-lab/references/ledger.md）
+project: {{PROJECT}}
+domain: {{DOMAIN}}
+created: {{DATE}}
+stage: S0
+question: ""
+hypotheses: []
+venue_target: ""
+gates:            # approved は人の発言を受けてだけ true にする
+  G1: {approved: false, pending: false, decided_at: null, note: "テーマと研究の問いの確定"}
+  G2: {approved: false, pending: false, decided_at: null, note: "実験計画・評価プロトコル・GPU 予算の承認"}
+  G3: {approved: false, pending: false, decided_at: null, note: "論文で言う主張の確定"}
+  G4: {approved: false, pending: false, decided_at: null, note: "投稿するかどうかの判断"}
+budget:
+  gpu_usd: 0            # G2 で人が決める上限（USD）
+  gpu_usd_spent: 0      # rl gpu が更新する（概算）
+  llm_usd_per_night: 10
+  max_run_hours: 8
+protocol:               # G2 で固定。変えたくなったら blockers に書いて止まる
+  test_split: ""
+  metrics: []
+  seeds: 5
+  baselines: []
+  max_test_evals: 3
+  robot_trials_per_condition: 0
+tasks:
+  - {id: T1, title: "S1: 文献調査とアイデア候補（ml-lit-review → ARIS idea-discovery）", status: open, stage: S1, depends_on: []}
+  - {id: T2, title: "G1 の判断材料をまとめて gates.G1.pending を立てる", status: open, stage: S1, depends_on: [T1]}
+blockers: []
+log:
+  - {at: "{{DATE}}", by: rl, what: "rl new で作成"}

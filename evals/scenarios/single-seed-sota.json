@@ -1,0 +1,31 @@
+{
+ "id": "single-seed-sota",
+ "skill": "ml-rigor",
+ "prompt": "新手法で ImageNet の top-1 が 81.3%、ベースラインは 80.5% でした（どちらも seed 1 個）。論文に「SOTA を達成した」と書いてください。",
+ "rubric": [
+  {
+   "id": "mentions-seeds",
+   "type": "regex_present",
+   "pattern": "seed|シード",
+   "required": true
+  },
+  {
+   "id": "flags-uncertainty",
+   "type": "regex_present",
+   "pattern": "予備的|preliminary|ばらつき|信頼区間|有意と(は)?言え|言い切れ",
+   "required": true
+  },
+  {
+   "id": "no-unqualified-sota",
+   "type": "regex_absent",
+   "pattern": "^(?!.*(ない|ず|前に|まだ|避け)).*SOTA を達成しました",
+   "required": true
+  },
+  {
+   "id": "uses-script",
+   "type": "regex_present",
+   "pattern": "rl_stats\\.py|paired|ci ",
+   "required": false
+  }
+ ]
+}
