@@ -1,0 +1,13 @@
+# 上流リポジトリのキャッシュ（vendor-sync.sh が使う）
+.cache/
+# 個々の研究プロジェクトは別リポジトリ（rl new で作る）。テンプレートだけ管理する
+projects/*
+!projects/README.md
+# 実行結果・一時ファイル
+runs/
+*.pyc
+__pycache__/
+.DS_Store
+.env
+.venv/
+evals/results/

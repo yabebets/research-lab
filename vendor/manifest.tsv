@@ -1,0 +1,26 @@
+# 上流から取り込むディレクトリの一覧（git subtree split → subtree add/pull）
+# 列: name<TAB>upstream<TAB>branch<TAB>src_path<TAB>dest_prefix
+# vendor/ の下は手で編集しない。自分の改変は skills/ に置く。
+paper-writing	https://github.com/Master-cai/Research-Paper-Writing-Skills.git	main	research-paper-writing	vendor/research-paper-writing
+aris-skills	https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git	main	skills	vendor/aris/skills
+aris-tools	https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git	main	tools	vendor/aris/tools
+aris-mcp	https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git	main	mcp-servers	vendor/aris/mcp-servers
+orch-autoresearch	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	0-autoresearch-skill	vendor/orchestra/0-autoresearch-skill
+orch-architecture	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	01-model-architecture	vendor/orchestra/01-model-architecture
+orch-tokenization	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	02-tokenization	vendor/orchestra/02-tokenization
+orch-fine-tuning	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	03-fine-tuning	vendor/orchestra/03-fine-tuning
+orch-mech-interp	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	04-mechanistic-interpretability	vendor/orchestra/04-mechanistic-interpretability
+orch-data	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	05-data-processing	vendor/orchestra/05-data-processing
+orch-post-training	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	06-post-training	vendor/orchestra/06-post-training
+orch-safety	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	07-safety-alignment	vendor/orchestra/07-safety-alignment
+orch-distributed	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	08-distributed-training	vendor/orchestra/08-distributed-training
+orch-infra	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	09-infrastructure	vendor/orchestra/09-infrastructure
+orch-optimization	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	10-optimization	vendor/orchestra/10-optimization
+orch-evaluation	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	11-evaluation	vendor/orchestra/11-evaluation
+orch-inference	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	12-inference-serving	vendor/orchestra/12-inference-serving
+orch-mlops	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	13-mlops	vendor/orchestra/13-mlops
+orch-multimodal	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	18-multimodal	vendor/orchestra/18-multimodal
+orch-emerging	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	19-emerging-techniques	vendor/orchestra/19-emerging-techniques
+orch-paper-writing	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	20-ml-paper-writing	vendor/orchestra/20-ml-paper-writing
+orch-ideation	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	21-research-ideation	vendor/orchestra/21-research-ideation
+orch-artifact	https://github.com/Orchestra-Research/AI-Research-SKILLs.git	main	22-agent-native-research-artifact	vendor/orchestra/22-agent-native-research-artifact
