@@ -1,0 +1,20 @@
+# SkyPilot のタスク定義：isaacgym（rl sim setup isaacgym でプロジェクトの configs/sky/ に写し、rl gpu up <project> configs/sky/isaacgym.yaml --hours H --usd-per-hour X で立てる）
+# G2（計画と予算の承認）のあとでだけ使う。使い終わったら rl gpu down（放置は自動で消える）
+name: rl-isaacgym
+
+resources:
+  infra: runpod            # lambda にするなら lambda
+  accelerators: {L40S: 1, RTX4090: 1}
+  disk_size: 200
+
+workdir: .
+
+envs:
+  MAX_HOURS: 4             # rl gpu up が --hours で上書きする
+
+setup: |
+  # Isaac Gym Preview は NVIDIA の開発者登録のあとに手で取得した tar を workdir の third_party/ に置いておく（人の作業）
+  pip install -q -e third_party/isaacgym/python
+
+run: |
+  timeout "${MAX_HOURS}h" python -m src.run_sim   # 実験のスクリプトに置き換える

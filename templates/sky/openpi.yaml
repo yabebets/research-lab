@@ -1,0 +1,30 @@
+# SkyPilot のタスク定義：openpi（π0・π0.5）。rl sim setup openpi でプロジェクトの configs/sky/ に写し、rl gpu up <project> configs/sky/openpi.yaml --hours H --usd-per-hour X で立てる
+# G2（計画と予算の承認）のあとでだけ使う。使い終わったら rl gpu down（放置は自動で消える）
+# 重みは Gemma Terms of Use（LICENSE_GEMMA.txt）。checkpoint は gs://openpi-assets から自動で取る（ログイン不要）
+name: rl-openpi
+
+resources:
+  infra: runpod            # lambda にするなら lambda
+  accelerators: {RTX4090: 1, A100-80GB: 1, H100: 1}   # LoRA は 4090、全体の微調整は A100-80GB / H100
+  disk_size: 300
+  image_id: docker:nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04   # openpi は Ubuntu 22.04 だけ対応
+
+workdir: .
+
+envs:
+  MAX_HOURS: 4             # rl gpu up が --hours で上書きする
+  OPENPI_COMMIT: 215abfb217dbac7d5f1273282331b9b1866c0479
+  OPENPI_DATA_HOME: /root/.cache/openpi
+
+setup: |
+  apt-get update -qq && apt-get install -y -qq git git-lfs curl > /dev/null
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+  [ -d openpi ] || git clone -q https://github.com/Physical-Intelligence/openpi
+  cd openpi && git checkout -q "$OPENPI_COMMIT" && git submodule update -q --init --recursive
+  GIT_LFS_SKIP_SMUDGE=1 uv sync && GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+
+run: |
+  export PATH="$HOME/.local/bin:$PATH"
+  cd openpi
+  timeout "${MAX_HOURS}h" uv run scripts/train.py pi0_libero --exp-name=rl --overwrite   # 実験の設定に置き換える

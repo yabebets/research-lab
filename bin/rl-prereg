@@ -1,0 +1,120 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["ruamel.yaml>=0.18"]
+# ///
+"""rl prereg — G2 で承認した事前登録を凍結し、あとからの変更を見つける
+
+  rl prereg freeze [project] [--dry-run]                 plan.md の「## 事前登録」の節と research.yaml の protocol を
+                                                         ハッシュで固定し、prereg.lock.yaml と prereg/plan-section-<日付>.md を書く
+  rl prereg freeze [project] --refreeze --reason "…"     凍結し直す（人の承認を受けてだけ。前の凍結は history に残す）
+  rl prereg check [project] [--strict] [--quiet]          凍結時からのずれを表示。ずれていれば終了コード 1
+                                                         --strict: G2 承認済みで未凍結でも 1
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+import pathlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "lib"))
+from rlkit.common import resolve_project, load, dump, add_log, die  # noqa: E402
+from rlkit import prereg  # noqa: E402
+
+
+def cmd_freeze(a):
+    proj = resolve_project(a.project)
+    led = load(proj / "research.yaml")
+    g2 = (led.get("gates") or {}).get("G2") or {}
+    if not g2.get("approved") and not a.dry_run:
+        die("G2（計画と評価プロトコルの承認）の前は凍結できません。人が承認してから。中身の確認だけなら --dry-run")
+    old = prereg.load_lock(proj)
+    if old is not None and not a.refreeze and not a.dry_run:
+        d = prereg.drift(proj, led)
+        if not d["drift"]:
+            print(f"すでに凍結済みで、ずれもありません（{old.get('frozen_at')}）")
+            return
+        die("すでに凍結済みで、凍結時から変わっています（rl prereg check）。"
+            "変更を戻すか、人の承認を受けて --refreeze --reason \"…\" で凍結し直す")
+    if a.refreeze and not a.reason:
+        die("--refreeze には --reason が要ります（誰がいつ何を承認したか）")
+    cur = prereg.current(proj, led)
+    if cur["errors"]:
+        die("凍結できません: " + " / ".join(cur["errors"]))
+    lock, copy_rel = prereg.build_lock(proj, led, cur)
+    if old is not None:
+        hist = list(old.get("history") or [])
+        hist.append({"frozen_at": old.get("frozen_at"), "plan_sha256": (old.get("plan") or {}).get("sha256"),
+                     "protocol_sha256": (old.get("protocol") or {}).get("sha256"),
+                     "copy": (old.get("plan") or {}).get("copy"), "replaced_because": a.reason})
+        lock["history"] = hist
+    print(f"plan.md の節: {cur['plan']['heading']}  sha256={cur['plan']['sha256'][:16]}…")
+    print(f"protocol:     sha256={cur['protocol']['sha256'][:16]}…")
+    print(cur["protocol"]["text"].rstrip())
+    if lock["plan"]["git_dirty"]:
+        print("⚠ plan.md に commit していない変更があります。凍結の後で commit しておく")
+    if a.dry_run:
+        print("\n（--dry-run: 何も書いていません）")
+        return
+    copy = proj / copy_rel
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    if copy.exists() and copy.read_text() != cur["plan"]["text"]:
+        i = 2
+        while (proj / copy_rel.replace(".md", f"-{i}.md")).exists():
+            i += 1
+        copy_rel = copy_rel.replace(".md", f"-{i}.md")
+        copy = proj / copy_rel
+        lock["plan"]["copy"] = copy_rel
+    copy.write_text(cur["plan"]["text"])
+    prereg.write_lock(proj, lock)
+    add_log(led, "rl", f"事前登録を{'凍結し直した（' + a.reason + '）' if a.refreeze else '凍結'}: {prereg.LOCK}")
+    dump(led, proj / "research.yaml")
+    print(f"\n凍結しました: {proj / prereg.LOCK}  （節のコピー: {copy_rel}）")
+
+
+def cmd_check(a):
+    proj = resolve_project(a.project)
+    led = load(proj / "research.yaml")
+    d = prereg.drift(proj, led)
+    if not d["locked"]:
+        g2 = ((led.get("gates") or {}).get("G2") or {}).get("approved")
+        if g2:
+            print("⚠ G2 は承認済みですが、事前登録が凍結されていません（rl prereg freeze）")
+            sys.exit(1 if a.strict else 0)
+        if not a.quiet:
+            print("事前登録はまだ凍結されていません（G2 の承認後に rl prereg freeze）")
+        return
+    if not d["drift"]:
+        if not a.quiet:
+            lock = prereg.load_lock(proj)
+            print(f"✓ 事前登録は凍結時（{lock.get('frozen_at')}）のままです")
+        return
+    print("✗ 事前登録が凍結時から変わっています")
+    for m in d["messages"]:
+        print(f"  {m}")
+    if d["diff"]:
+        print(d["diff"].rstrip())
+    print("戻すか、人の承認を受けて `rl prereg freeze --refreeze --reason \"…\"`。それまで test の実行は断ります")
+    sys.exit(1)
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="rl prereg", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("freeze")
+    p.add_argument("project", nargs="?")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--refreeze", action="store_true")
+    p.add_argument("--reason")
+    p.set_defaults(fn=cmd_freeze)
+    p = sub.add_parser("check")
+    p.add_argument("project", nargs="?")
+    p.add_argument("--strict", action="store_true")
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(fn=cmd_check)
+    a = ap.parse_args()
+    a.fn(a)
+
+
+if __name__ == "__main__":
+    main()

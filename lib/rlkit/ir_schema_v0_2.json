@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-lab.local/rlkit/ir_schema_v0_2.json",
+  "title": "組立手順書の中間表現 v0.2",
+  "description": "projects/robot-assembly-bench/notes/ir-design-2026-11-09.md §2 と taxonomy-draft §9–§10 に合わせたスキーマ。L1（atomic）が主の単位、L2（manual_steps）と L3（sections）は索引。値ごとに出所（src）を持つ。拡張の項目は x_ を前に付ける。意味のチェック（ID の重複、参照、必須の辺の循環など）は rl annotate validate が行う。",
+  "type": "object",
+  "required": ["robot", "source", "bom", "manual_steps", "atomic", "precedence"],
+  "additionalProperties": false,
+  "patternProperties": {"^x_": {}},
+  "properties": {
+    "ir_version": {"const": "0.2"},
+    "robot": {"$ref": "#/$defs/robot_id"},
+    "source": {"$ref": "#/$defs/source"},
+    "variants": {"type": "array", "items": {"$ref": "#/$defs/variant"}},
+    "bom": {"type": "array", "items": {"$ref": "#/$defs/bom_item"}},
+    "sections": {"type": "array", "items": {"$ref": "#/$defs/section"}},
+    "manual_steps": {"type": "array", "items": {"$ref": "#/$defs/manual_step"}},
+    "atomic": {"type": "array", "items": {"$ref": "#/$defs/atomic"}},
+    "precedence": {"type": "array", "items": {"$ref": "#/$defs/edge"}},
+    "annotation": {"$ref": "#/$defs/annotation"},
+    "notes": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "robot_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_]*$"},
+    "local_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
+    "part_ref": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_]*:[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "description": "<robot>:<bom_id>。機種をまたぐ参照（lekiwi が so101 のグリッパにねじ止め）も同じ書き方"
+    },
+    "variant_list": {
+      "description": "その行が属する変種。all は全変種",
+      "type": "array", "items": {"type": "string"}
+    },
+    "src": {
+      "description": "値の出所。stated=手順書の本文、cad/bom=CAD・部品表、rule=型などからの規則、sim=シミュレーション、rule+sim、sim-uncertain=すきま・摩擦を振ると変わる、borrowed[:robot]=他機種から借用、annotator=人の推論・判断、execution=実行による検証。評価の入力に使えるのは stated・cad・bom だけ",
+      "anyOf": [
+        {"type": "null"},
+        {"enum": ["stated", "cad", "bom", "rule", "sim", "rule+sim", "sim-uncertain", "annotator", "execution"]},
+        {"type": "string", "pattern": "^borrowed(:[a-z0-9_]+)?$"}
+      ]
+    },
+    "prov": {
+      "description": "出所つきの値 {v, src}",
+      "type": "object",
+      "required": ["v", "src"],
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "v": {},
+        "src": {"$ref": "#/$defs/src"},
+        "reason": {"type": ["string", "null"]},
+        "note": {"type": ["string", "null"]}
+      }
+    },
+    "axis": {
+      "type": "object",
+      "required": ["v", "src"],
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "v": {},
+        "src": {"$ref": "#/$defs/src"},
+        "reason": {"type": ["string", "null"]},
+        "note": {"type": ["string", "null"]}
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["url", "license", "format"],
+      "additionalProperties": true,
+      "properties": {
+        "url": {"type": "string"},
+        "fetched": {"type": ["string", "null"]},
+        "commit": {"type": ["string", "object", "null"]},
+        "license": {"type": "string"},
+        "format": {"enum": ["numbered_markdown_photos", "unnumbered_markdown_video", "pdf_figures", "video_only", "interactive_3d"]},
+        "counts": {
+          "type": "object",
+          "additionalProperties": {"type": ["integer", "null"]},
+          "properties": {
+            "numbered_steps": {"type": ["integer", "null"]},
+            "unnumbered_steps": {"type": ["integer", "null"]},
+            "photos": {"type": ["integer", "null"]},
+            "videos": {"type": ["integer", "null"]}
+          }
+        },
+        "manual_origin": {"enum": ["manual", "transcribed_by_us"]},
+        "redistribution": {"enum": ["ok", "restricted"], "description": "NC ライセンスなど、注釈を外に出せないとき restricted"}
+      }
+    },
+    "variant": {
+      "oneOf": [
+        {"type": "string"},
+        {
+          "type": "object",
+          "required": ["id"],
+          "additionalProperties": false,
+          "patternProperties": {"^x_": {}},
+          "properties": {
+            "id": {"type": "string"},
+            "main": {"type": ["boolean", "null"]},
+            "group": {"type": ["string", "null"]},
+            "notes": {"type": ["string", "null"]}
+          }
+        }
+      ]
+    },
+    "bom_item": {
+      "type": "object",
+      "required": ["id", "name", "kind"],
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "id": {"$ref": "#/$defs/local_id"},
+        "name": {"type": "string"},
+        "qty": {"type": ["integer", "string", "null"]},
+        "variant": {"$ref": "#/$defs/variant_list"},
+        "kind": {"enum": ["printed", "purchased", "fastener", "electronics", "cable", "tool", "included_with", "subassembly_external"]},
+        "included_with": {"type": ["string", "null"], "description": "kind: included_with のとき、付属元の BOM ID"},
+        "parent": {"type": ["string", "null"], "description": "締結部品のキットなど、中身を展開した元の BOM ID"},
+        "cad": {"type": "array", "items": {"type": "string"}},
+        "sim": {"type": "array", "items": {"type": "string"}},
+        "size": {"type": ["string", "null"]},
+        "file": {"type": ["string", "null"]},
+        "external_ref": {"type": ["string", "null"], "description": "kind: subassembly_external のとき、別の IR ファイル（例 so101.yaml）"},
+        "notes": {"type": ["string", "null"]}
+      }
+    },
+    "section": {
+      "description": "L3 = 手順書の節。木でなくてよい（親を持たない）",
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "id": {"$ref": "#/$defs/local_id"},
+        "title": {"type": "string"},
+        "repeat": {"type": "integer", "minimum": 1},
+        "variant": {"$ref": "#/$defs/variant_list"},
+        "notes": {"type": ["string", "null"]}
+      }
+    },
+    "manual_step": {
+      "description": "L2 = 手順書のステップ",
+      "type": "object",
+      "required": ["id", "text"],
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "id": {"$ref": "#/$defs/local_id"},
+        "manual_ref": {"type": ["string", "null"]},
+        "section": {"type": ["string", "null"]},
+        "variant": {"$ref": "#/$defs/variant_list"},
+        "text": {"type": "string"},
+        "media": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "properties": {
+            "photos": {"type": ["integer", "null"]},
+            "figures": {"type": ["integer", "null"]},
+            "video": {"type": ["integer", "object", "string", "null"]}
+          }
+        },
+        "repeat": {"type": "integer", "minimum": 1},
+        "notes": {"type": ["string", "null"]}
+      }
+    },
+    "type": {"enum": ["INS", "PRS", "SNP", "SCR", "HRN", "CBL", "CON", "ADH", "ALN", "SW", "INSP", "OTH", "unknown"]},
+    "fasteners": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "size": {"type": ["string", "null"]},
+        "count": {"type": ["integer", "null"], "minimum": 1},
+        "thread": {"enum": ["machine", "self_tapping", "unknown", null]},
+        "nuts": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {"size": {"type": ["string", "null"]}, "count": {"type": ["integer", "null"]}}
+        },
+        "size_source": {
+          "anyOf": [
+            {"type": "null"},
+            {"enum": ["manual", "bom", "cad", "guess"]},
+            {"type": "string", "pattern": "^borrowed(:[a-z0-9_]+)?$"}
+          ]
+        },
+        "bom_ref": {"type": ["string", "null"]},
+        "notes": {"type": ["string", "null"]}
+      }
+    },
+    "label": {
+      "description": "taxonomy §10.1 の独立した軸。旧ラベル（R/R+J/R+T/H/S/X）は summary として派生の要約",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "tool_required": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": ["none", "screwdriver", "hex", "pliers", "other", "unknown", null]}}}]},
+        "tool_access": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": ["ok", "blocked", "not_checked", null]}}}]},
+        "hold_needed": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": [0, 1, "2+", "unknown", null]}}}]},
+        "fixture_required": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": ["no", "yes", "unknown", null]}}}]},
+        "geometric_screen": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": ["pass", "fail", "not_applicable", "uncertain", null]}}}]},
+        "evaluator_support": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": ["supported", "unsupported", null]}}}]},
+        "human_required": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": ["yes", "no", "unknown", null]}}}]},
+        "execution_outcome": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": ["success", "fail", "not_run", null]}}}]},
+        "scope": {"enum": ["assembly", "software", "inspect", "manufacturing"]},
+        "summary": {"allOf": [{"$ref": "#/$defs/axis"}, {"properties": {"v": {"enum": ["R", "R+J", "R+T", "H", "S", "X", "unknown", null]}}}]}
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "status": {"enum": ["draft", "reviewed", "blank"]},
+        "drafted_by": {"type": ["string", "null"]},
+        "reviewed_by": {"type": ["string", "null"]},
+        "reviewed_at": {"type": ["string", "null"]},
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "field": {"type": "string"},
+              "from": {},
+              "to": {},
+              "reason": {"type": "string", "minLength": 1},
+              "by": {"type": ["string", "null"]},
+              "at": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "atomic": {
+      "description": "L1 = 原子工程（主の単位）",
+      "type": "object",
+      "required": ["id", "l2_refs", "type", "parts_in", "attrs", "label"],
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "id": {"$ref": "#/$defs/local_id"},
+        "l2_refs": {"type": "array", "items": {"type": "string"}, "description": "多対多。番号ステップの外の本文から拾った L1 は空でよいが source_section を書く"},
+        "fix_state": {"enum": ["placed", "fixed", null]},
+        "type": {"$ref": "#/$defs/type"},
+        "secondary": {"type": "array", "items": {"$ref": "#/$defs/type"}},
+        "from_media_only": {"type": "boolean"},
+        "parts_in": {"type": "array", "items": {"$ref": "#/$defs/part_ref"}},
+        "count": {"type": ["integer", "null"], "minimum": 1},
+        "template_of": {"type": ["string", "null"]},
+        "variant": {"$ref": "#/$defs/variant_list"},
+        "fasteners": {"$ref": "#/$defs/fasteners"},
+        "attrs": {"type": "object", "additionalProperties": {"$ref": "#/$defs/prov"}},
+        "tool": {"$ref": "#/$defs/prov"},
+        "optional": {"type": "boolean"},
+        "source_section": {"type": ["string", "null"]},
+        "label": {"$ref": "#/$defs/label"},
+        "review": {"$ref": "#/$defs/review"},
+        "notes": {"type": ["string", "null"]}
+      }
+    },
+    "edge": {
+      "description": "先行関係 from → to（L1 の ID）。kind: required=幾何などで必須 / recommended=本文が勧める可逆な順 / unknown=未判定。order_only の辺は記録するが正解に入れない（kind は null か recommended/unknown）",
+      "type": "object",
+      "required": ["from", "to", "kind", "source"],
+      "additionalProperties": false,
+      "patternProperties": {"^x_": {}},
+      "properties": {
+        "from": {"type": "string"},
+        "to": {"type": "string"},
+        "kind": {"enum": ["required", "recommended", "unknown", null]},
+        "source": {"enum": ["text_explicit", "text_anaphora", "geometry", "order_only", "unknown"]},
+        "src": {"$ref": "#/$defs/src"},
+        "review": {"$ref": "#/$defs/review"},
+        "notes": {"type": ["string", "null"]}
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "drafted_by": {"type": ["string", "null"], "description": "下書きのモデル名。評価対象の言語モデルと同じにしない"},
+        "drafted_at": {"type": ["string", "null"]},
+        "annotators": {"type": "array", "items": {"type": "string"}},
+        "dry_run_schema": {"type": "boolean", "description": "G2 前のテスト機種での、スキーマの確かめだけの下書き（正解に使わない）"},
+        "converted_from": {"type": ["string", "null"]},
+        "blank": {"type": "boolean"}
+      }
+    }
+  }
+}

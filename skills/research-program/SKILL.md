@@ -6,7 +6,7 @@ description: 大きな研究テーマ（1〜3 個）を、論文・研究プロ�
 # research-program — テーマを論文の単位に切る
 
 `research-themes` でテーマが見えたあと、`research-lab` の G1 の前後で使う。
-出力は `notes/program.md`（プログラム台帳）。各論文は `research-lab` の 1 プロジェクト（`rl new`）になり、`research.yaml` の `program` 欄でプログラムに紐づく。
+出力は `~/research-lab/programs/<名前>/` の `program.md`（人が読む全体像）と `program.yaml`（系統・論文・プロジェクトの対応表、正本）。`rl program new <名前>` で作る。各論文は `research-lab` の 1 プロジェクトになり、`rl new <project> --program <名前> --paper <ID>` か `rl program link` で両方の台帳に紐づく。programs/ は git の管理外（公開リポジトリに入れない）。
 
 ## プログラムの形
 
@@ -41,8 +41,22 @@ description: 大きな研究テーマ（1〜3 個）を、論文・研究プロ�
 4. **依存と資産を描く**：mermaid の有向グラフで、論文 → 論文、論文 → 資産 の矢印を描く。矢印が後ろに向いていたら順番を直す
 5. **時期を当てる**：投稿先の締切から逆算して、各論文の「実験を始める月」「原稿を書き始める月」を置く。本人の週あたりの時間で割って、入りきるかを見る。入らなければ論文を減らす（質は落とさない）
 6. **潰す**：原則 1〜6 で各行を自問。原則 1 に反する行（新しい軸が 2 つ以上）は分割する
-7. **書き出す**：`notes/program.md`。各論文を `rl new <名前>` でプロジェクトにし、`research.yaml` の `program` 欄を書く（下）
+7. **書き出す**：`rl program new <名前>` で作り、`program.md` に全体像、`program.yaml` に系統（lines）と論文（papers）を書く。論文に着手するときに `rl new <project> --program <名前> --paper <ID>` でプロジェクトを作る（すでにあれば `rl program link <名前> <ID> <project>`）。`rl program readme` で program.md の状況の枠を更新し、`rl program check` で対応を確かめる
 8. **見直す**：次のどれかで戻ってくる。論文が 1 本終わった／競合が出た／G1 が覆った／機材・時間の条件が変わった。見直しは `program.md` の「履歴」に 1 行ずつ残す（過去の版は消さない）
+
+## program.yaml の書式（正本）
+
+```yaml
+program: <名前>
+title: ""
+lines:            # 系統。status: active | later | paused | dropped
+  - {id: A, name: "", trunk: "<幹：長期の問い 1 文>", status: active}
+papers:           # 1 論文 = 1 プロジェクト。status: planned | active | done | dropped
+  - {id: P1, line: A, question: "", project: null, status: planned, depends_on: [], venue: ""}
+```
+
+- `project` は `rl program link` が書く（手で書かない）。プロジェクト側の `research.yaml` の `program: {name, paper_id, depends_on}` も同時に書かれる
+- 論文が終わったら `status: done` にする。`rl program status` は、依存する論文が done でない間「依存の待ち」と表示する
 
 ## program.md の書式
 

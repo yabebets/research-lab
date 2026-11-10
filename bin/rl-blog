@@ -1,0 +1,118 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["ruamel.yaml>=0.18"]
+# ///
+"""rl blog — 実験の記録（runs/）から、ブログ仕立ての下書きを作る（公開は人が決める）
+
+  rl blog new [project] --title "…" (--runs id1,id2 | --since YYYY-MM-DD) [--zenn] [--slug s]
+              [--emoji 🦾] [--topics a,b] [--figs path,path] [--force]
+      notes/blog/YYYY-MM-DD-<slug>.md を templates/blog/post.md から作る。
+      結果の表・設定・図・再現の仕方は runs/ から作る（数字の出どころは metrics.json だけ）
+  rl blog refresh <post.md>          自動の節（結果の表・設定・図・再現）を runs/ から作り直す
+  rl blog check <post.md> [--strict] 点検。表にない数字・published: true・シミュレーションの明記・非公開の情報
+  rl blog list [project]
+
+書き方: skills/research-lab/references/blog.md
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+import pathlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "lib"))
+from rlkit.common import resolve_project, load, die  # noqa: E402
+from rlkit import blog  # noqa: E402
+
+
+def cmd_new(a):
+    proj = resolve_project(a.project)
+    led = load(proj / "research.yaml")
+    if not a.runs and not a.since:
+        die("--runs か --since で、記事にする run を指定してください")
+    try:
+        rids = blog.select_runs(proj, a.runs, a.since)
+    except ValueError as e:
+        die(str(e))
+    if not rids:
+        die("対象の run がありません（rl run list で確認）")
+    topics = [t.strip() for t in a.topics.split(",")] if a.topics else None
+    figs = [f.strip() for f in a.figs.split(",")] if a.figs else None
+    try:
+        path = blog.new_post(proj, led, title=a.title, run_ids=rids, zenn=a.zenn, slug=a.slug,
+                             emoji=a.emoji, topics=topics, figs=figs, force=a.force)
+    except (ValueError, FileExistsError) as e:
+        die(str(e))
+    print(f"下書きを作りました: {path}")
+    print(f"  run {len(rids)} 件: {', '.join(rids)}")
+    print("  次: TODO を埋める（書き方は skills/research-lab/references/blog.md）→ rl blog check " + str(path))
+    print("  公開（Zenn・HF・SNS）は人が決める。published は false のまま")
+
+
+def cmd_refresh(a):
+    try:
+        changed = blog.refresh(pathlib.Path(a.post))
+    except (ValueError, FileNotFoundError) as e:
+        die(str(e))
+    print("作り直しました: " + (", ".join(changed) if changed else "（変更なし）"))
+
+
+def cmd_check(a):
+    post = pathlib.Path(a.post)
+    if not post.is_file():
+        die(f"ファイルがありません: {post}")
+    errs, warns = blog.check(post)
+    for e in errs:
+        print(f"✗ {e}")
+    for w in warns:
+        print(f"⚠ {w}")
+    if not errs and not warns:
+        print("✓ 問題は見つかりませんでした")
+    else:
+        print(f"{len(errs)} 件のエラー・{len(warns)} 件の警告")
+    sys.exit(1 if errs or (a.strict and warns) else 0)
+
+
+def cmd_list(a):
+    proj = resolve_project(a.project)
+    posts = blog.list_posts(proj)
+    if not posts:
+        print("（下書きはありません。rl blog new で作る）")
+        return
+    for p in posts:
+        flag = "公開済み?" if p["published"] else "下書き"
+        print(f"{p['path'].name}\t{flag}\t{'zenn' if p['zenn'] else '-'}\trun {p['runs']}\tTODO {p['todo']}\t{p['title']}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="rl blog", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("new")
+    p.add_argument("project", nargs="?")
+    p.add_argument("--title", required=True)
+    p.add_argument("--runs", help="run_id をカンマ区切りで（一意に決まる部分文字列でも可）")
+    p.add_argument("--since", help="この日付（YYYY-MM-DD）以降の、終わった run を全部")
+    p.add_argument("--zenn", action="store_true", help="Zenn 形式の front matter（published: false）")
+    p.add_argument("--slug", help="ファイル名・Zenn の slug（a-z0-9-_）。省略時はタイトルから")
+    p.add_argument("--emoji", default="🧪")
+    p.add_argument("--topics", help="Zenn の topics（カンマ区切り、5 個まで）")
+    p.add_argument("--figs", help="追加の図（プロジェクトからのパス、カンマ区切り）")
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(fn=cmd_new)
+    p = sub.add_parser("refresh")
+    p.add_argument("post")
+    p.set_defaults(fn=cmd_refresh)
+    p = sub.add_parser("check")
+    p.add_argument("post")
+    p.add_argument("--strict", action="store_true", help="警告でも終了コード 1")
+    p.set_defaults(fn=cmd_check)
+    p = sub.add_parser("list")
+    p.add_argument("project", nargs="?")
+    p.set_defaults(fn=cmd_list)
+    a = ap.parse_args()
+    a.fn(a)
+
+
+if __name__ == "__main__":
+    main()

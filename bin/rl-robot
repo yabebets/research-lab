@@ -1,0 +1,115 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["ruamel.yaml>=0.18"]
+# ///
+"""rl robot — ロボットの公開データ（CAD・手順書・部品表）の共有キャッシュ
+
+  rl robot list                                  一覧（robots/catalog.yaml）と、キャッシュにあるもの
+  rl robot show <robot>                          1 機種の取得元・ライセンス・中身・派生物
+  rl robot fetch <robot..> [--force]             一覧のとおりに取得して sha256 を確かめる（ログイン・登録が要るものは取らない）
+  rl robot link <robot..> --project P            P/data/raw/<robot> をキャッシュへのリンクにし、P/robots.lock.yaml に版を残す
+  rl robot check [--project P] [--quick]         リンクと sha256 を確かめる（--project なしならキャッシュ全体）
+  rl robot migrate --project P [--apply]         P/data/raw/ の実体をキャッシュへ移してリンクに置き換える（既定は下見だけ）
+
+キャッシュ：~/research-lab/.cache/robots/<robot>/<version>/{raw,derived}/（git の管理外。データは公開しない）
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from rlkit import robots as R  # noqa: E402
+from rlkit.common import die, resolve_project  # noqa: E402
+
+
+def cmd_list(a, cat):
+    print(f"キャッシュ: {R.cache_root()}")
+    for robot, e in cat.items():
+        v = str(e["version"])
+        raw = R.raw_dir(robot, v)
+        here = "公開待ち" if e.get("pending") else (f"あり {R.human(R.dir_size(raw))}" if (raw / R.SUMS).exists() else "未取得")
+        ders = [f"{d['name']}@{d['version']}" for d in (e.get("derived") or [])]
+        lic = (e.get("licenses") or {}).get("hardware", "")
+        print(f"  {robot:<15} {e.get('role', ''):<5} {v:<10} {here:<14} {lic[:38]:<38} {e.get('desc', '')}")
+        if ders:
+            print(f"  {'':<15} 派生物: {', '.join(ders)}")
+
+
+def cmd_show(a, cat):
+    from ruamel.yaml import YAML
+    if a.robot not in cat:
+        die(f"一覧にない機種です: {a.robot}（rl robot list）")
+    YAML().dump({a.robot: cat[a.robot]}, sys.stdout)
+
+
+def cmd_fetch(a, cat):
+    for robot in a.robots:
+        if robot not in cat:
+            die(f"一覧にない機種です: {robot}（rl robot list）")
+        try:
+            R.fetch(robot, cat[robot], force=a.force)
+        except (RuntimeError, OSError) as ex:
+            die(f"{robot} の取得に失敗: {ex}")
+
+
+def cmd_link(a, cat):
+    proj = resolve_project(a.project)
+    for robot in a.robots:
+        if robot not in cat:
+            die(f"一覧にない機種です: {robot}")
+        if cat[robot].get("pending"):
+            die(f"{robot} は公開待ちで、まだデータがありません（{cat[robot]['pending']}）")
+        R.link(robot, cat[robot], proj)
+    print(f"記録しました: {proj / R.LOCK}")
+
+
+def cmd_check(a, cat):
+    if a.project:
+        ok = R.check_project(resolve_project(a.project), cat, deep=not a.quick)
+    else:
+        ok = R.check_cache(cat, deep=not a.quick)
+    sys.exit(0 if ok else 1)
+
+
+def cmd_migrate(a, cat):
+    proj = resolve_project(a.project)
+    plans = R.plan_migrate(proj, cat)
+    if not plans:
+        print("移すものはありません（data/raw/ は全部リンク済み）"); return
+    print(("移します" if a.apply else "下見（--apply で実行）") + f": {proj}")
+    reps, failed = [], []
+    for p in plans:
+        if p["robot"] is None:
+            print(f"? {p['src'].relative_to(proj)}: 一覧（robots/catalog.yaml）に無いので触りません")
+            continue
+        try:
+            reps.append(R.migrate_one(proj, p, a.apply))
+        except (RuntimeError, OSError) as ex:
+            failed.append(p["robot"])
+            print(f"✗ {p['robot']}: {ex}")
+    total = sum(r["size"] for r in reps)
+    print(f"{'移した' if a.apply else '移す予定'}: {len(reps)} 機種、{R.human(total)}" + (f"。失敗 {failed}" if failed else ""))
+    if a.apply:
+        for r in reps:
+            print(f"  {r['robot']:<15} {r['version']:<10} {R.human(r['size']):>9}  ファイル {r['files']}（控えに足した {r.get('added_entries', 0)}）  {r.get('action', '')}")
+    sys.exit(1 if failed else 0)
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="rl robot", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("list").set_defaults(fn=cmd_list)
+    p = sub.add_parser("show"); p.add_argument("robot"); p.set_defaults(fn=cmd_show)
+    p = sub.add_parser("fetch"); p.add_argument("robots", nargs="+"); p.add_argument("--force", action="store_true"); p.set_defaults(fn=cmd_fetch)
+    p = sub.add_parser("link"); p.add_argument("robots", nargs="+"); p.add_argument("--project", required=True); p.set_defaults(fn=cmd_link)
+    p = sub.add_parser("check"); p.add_argument("--project"); p.add_argument("--quick", action="store_true", help="sha256 を計算し直さない"); p.set_defaults(fn=cmd_check)
+    p = sub.add_parser("migrate"); p.add_argument("--project", required=True); p.add_argument("--apply", action="store_true"); p.set_defaults(fn=cmd_migrate)
+    a = ap.parse_args()
+    a.fn(a, R.load_catalog())
+
+
+if __name__ == "__main__":
+    main()

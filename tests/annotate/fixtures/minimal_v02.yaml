@@ -1,0 +1,83 @@
+# テスト用の最小の IR v0.2（架空の 2 関節の腕）
+ir_version: '0.2'
+robot: toyarm
+source:
+  url: https://example.org/toyarm/assembly.md
+  fetched: '2026-11-10'
+  commit: abc123
+  license: Apache-2.0
+  format: numbered_markdown_photos
+  counts: {numbered_steps: 3, unnumbered_steps: 0, photos: 3, videos: 0}
+  manual_origin: manual
+variants: [{id: main, main: true}]
+bom:
+  - {id: B01, name: servo, qty: 2, kind: electronics}
+  - {id: A01, name: servo horn, qty: 2, kind: included_with, included_with: B01}
+  - {id: P01, name: base, qty: 1, kind: printed, cad: [Base_01], sim: [base.stl]}
+  - {id: P02, name: link, qty: 1, kind: printed}
+  - {id: F01, name: M2x6 screw, qty: 8, kind: fastener, size: M2x6}
+sections:
+  - {id: SEC1, title: Joint 1}
+manual_steps:
+  - {id: S01, manual_ref: Step 1, section: SEC1, variant: [all], text: 'Place the servo into the base.', media: {photos: 1}}
+  - {id: S02, manual_ref: Step 2, section: SEC1, variant: [all], text: 'Fasten the servo with 4 M2x6 screws, two from the bottom.', media: {photos: 1}}
+  - {id: S03, manual_ref: Step 3, section: SEC1, variant: [all], text: 'Attach the horn without moving the motor position, then plug the cable.', media: {photos: 1}}
+atomic:
+  - id: A1
+    l2_refs: [S01, S02]
+    fix_state: fixed
+    type: SCR
+    secondary: [INS]
+    from_media_only: false
+    parts_in: [toyarm:B01, toyarm:P01]
+    count: null
+    template_of: null
+    fasteners: {size: M2x6, count: 4, thread: machine, size_source: manual}
+    attrs:
+      flips: {v: 1, src: stated}
+      force: {v: low, src: rule}
+      min_part_mm: {v: 6, src: bom}
+    tool: {v: screwdriver PH0, src: rule}
+    label:
+      tool_required: {v: screwdriver, src: rule}
+      tool_access: {v: not_checked, src: null}
+      hold_needed: {v: unknown, src: null}
+      evaluator_support: {v: supported, src: rule}
+      human_required: {v: unknown, src: null}
+      scope: assembly
+    review: {status: draft, drafted_by: test}
+  - id: A2
+    l2_refs: [S03]
+    type: HRN
+    parts_in: [toyarm:A01, toyarm:B01]
+    attrs:
+      zero_position: {v: 'yes', src: stated}
+    label:
+      tool_required: {v: none, src: rule}
+      evaluator_support: {v: supported, src: rule}
+      scope: assembly
+  - id: A3
+    l2_refs: [S03]
+    type: CON
+    parts_in: [toyarm:B01]
+    count: 1
+    attrs:
+      deformable: {v: 'yes', src: bom}
+    label:
+      evaluator_support: {v: unsupported, src: rule}
+      human_required: {v: unknown, src: null}
+      scope: assembly
+  - id: A4
+    l2_refs: [S03]
+    type: SCR
+    parts_in: [toyarm:A01]
+    fasteners: {size: M3x6, count: 1, size_source: borrowed:so101}
+    attrs: {}
+    label:
+      evaluator_support: {v: supported, src: rule}
+      scope: assembly
+precedence:
+  - {from: A1, to: A2, kind: required, source: geometry, src: cad}
+  - {from: A2, to: A4, kind: required, source: geometry, src: cad}
+  - {from: A1, to: A3, kind: recommended, source: text_explicit, src: stated}
+  - {from: A3, to: A4, kind: null, source: order_only}

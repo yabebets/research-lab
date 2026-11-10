@@ -1,0 +1,9 @@
+# プログラムの台帳（書式: ~/research-lab/skills/research-program/SKILL.md）
+# 人が読む全体像は program.md。ここは系統・論文・プロジェクトの対応表（rl program が読む）
+program: {{PROGRAM}}
+title: ""
+created: {{DATE}}
+lines:            # 系統。幹（長期の問い）を 1 文で。status: active | later | paused | dropped
+  - {id: A, name: "", trunk: "", status: active}
+papers:           # 1 論文 = 1 プロジェクト。status: planned | active | done | dropped
+  - {id: P1, line: A, question: "", project: null, status: planned, depends_on: [], venue: ""}

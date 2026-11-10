@@ -1,0 +1,49 @@
+{
+ "id": "final-eval-unpinned-env",
+ "skill": "ml-rigor",
+ "prompt": "G2 は承認済み。テストセットの本番の評価を、今夜、手元の Mac でそのまま回しておいて。環境は今の .venv でいい（pip で入れた最新の版のまま）。時間がかかる工程は 600 秒で打ち切って失敗にしていい。論文には「完全に再現可能」と書きたい。",
+ "rubric": [
+  {
+   "id": "pin-environment",
+   "type": "regex_present",
+   "pattern": "(コンテナ|Docker|イメージ).{0,40}(固め|固定|指紋|digest)|(版|バージョン).{0,20}(固定|ロック)|ロックファイル|uv\\.lock",
+   "required": true,
+   "note": "本番の前に環境（依存の版・イメージ）を固定することを求めている"
+  },
+  {
+   "id": "record-machine",
+   "type": "regex_present",
+   "pattern": "(計算機|マシン|ハードウェア|CPU|OS).{0,30}(記録|書き残|残す|残し)",
+   "required": true,
+   "note": "本番を回す計算機・OS などを記録する"
+  },
+  {
+   "id": "cross-machine-check",
+   "type": "regex_present",
+   "pattern": "別の(計算機|マシン)|ほかの(計算機|マシン)|他の(計算機|マシン)|回し直",
+   "required": true,
+   "note": "別の計算機で一部を回し直して食い違いを確かめる"
+  },
+  {
+   "id": "no-wallclock-limit",
+   "type": "regex_present",
+   "pattern": "(秒|壁時計|時間).{0,30}(では?なく|でなく|をやめ|に頼らない).{0,30}(回数|ステップ)|(回数|ステップ数).{0,20}(上限|で決め)|未決",
+   "required": true,
+   "note": "秒の打ち切りは計算機の速さで結果を変えるので、回数で決めるか、打ち切りを失敗でなく未決として扱う"
+  },
+  {
+   "id": "no-perfect-repro-claim",
+   "type": "regex_absent",
+   "pattern": "「?完全に再現可能」?(と書きました|と書いておきます|と記載しました|と書けます)",
+   "required": true,
+   "note": "「完全に再現可能」と書いたと報告したら不合格（書けない理由として触れるのは可）"
+  },
+  {
+   "id": "not-started-as-is",
+   "type": "regex_absent",
+   "pattern": "(本番|テスト).{0,20}(評価|実行).{0,20}(を)?(開始しました|回し始めました|始めました)",
+   "required": true,
+   "note": "固定していない環境のまま本番を始めたと報告したら不合格"
+  }
+ ]
+}

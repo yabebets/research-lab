@@ -1,0 +1,373 @@
+# ロボットの公開データの一覧（rl robot が読む）。ここに書くのは取得元・版・ライセンス・中身の説明だけ。データ本体は書かない
+# データは ~/research-lab/.cache/robots/<robot>/<version>/raw/ に置き（git の管理外）、プロジェクトからはリンクで使う。
+# このリポジトリは公開なので、取得したファイルを robots/ や projects/ の git に入れない
+#
+# 項目:
+#   role       test（評価に使う）/ dev（判定器・前処理・プロンプトの調整用。配らない）/ other
+#   version    キャッシュのフォルダ名。commit の先頭 8 桁か、リリースのタグ
+#   link_as    プロジェクトの中のリンクの場所（既定 data/raw/<robot>）
+#   sources    取得の手順。method:
+#                git      … commit を固定した sparse checkout。include は gitignore の書式（no-cone）。
+#                           include_from_manifest: true なら robots/sums/<robot>/<version>.txt にある分だけ取る。
+#                           map（リポジトリのパス → 置く場所）、flatten（フォルダを無くす）、exclude（外す名前）。Git LFS は自動で取る
+#                url      … 1 ファイル（リリースの添付など）。sha256 があれば照合する
+#                unzip    … 取った zip を展開する
+#                snapshot … Web ページの保存など、同じものを自動で取り直せないもの（手順は note）
+#   local_files 取得のときに手元で作ったファイル（取り直せない。控えには入っている）
+#   verify     主なファイルの sha256（公開値・LFS の oid など）
+#   licenses   hardware / docs / software / weights を分けて書く。third_party は再配布してはいけないもの
+#   gated      ログイン・登録・メールが要るもの（rl robot fetch は取らない。サインアップを自動でしない）
+#   pending    公開待ち（データがまだ公開されていない）。理由と予定を書く。rl robot fetch・link は断り、list は「公開待ち」と出す。
+#              公開されたら sources を書いて pending を消す
+#   derived    raw から作ったもの。location: cache は <cache>/<robot>/<version>/derived/<name>@<version>/ に置く
+#              （移す前のパス raw/_derived/<from> にはリンクを残す）。location: project はプロジェクトの中に置いたまま
+#              scripts は research-lab からの相対パス
+robots:
+  roboto_origin:
+    role: test
+    desc: RoboParty の人型（V2.0、DM モータ 23）。全体の組立は SolidWorks のみ
+    version: "e60f6745"
+    sources:
+      - method: git
+        repo: https://github.com/Roboparty/rpo_hardware
+        commit: e60f6745b27b2331dff28c01284c1fe6cee74d42   # 2026-11-04。LICENSES.md が「Covered Source の置き場所」と指定する正本
+        dest: rpo_hardware
+        include_from_manifest: true   # 手順書・配線・部品表・STEP/STP・URDF・PCB の文書（SolidWorks と STL は別）
+        include: ["/*.md", "/LICENSE", "/atom_id.png", "/V2.0/", "!/V2.0/**/*.SLD*", "!/V2.0/**/*.sld*", "/V1.0/atom01_mechanic/00_Docs/", "/V1.0/atom01_pcb/"]
+      - method: git
+        repo: https://github.com/Roboparty/rpo_hardware
+        commit: e60f6745b27b2331dff28c01284c1fe6cee74d42
+        dest: solidworks
+        include: ["/V2.0/roboto_origin_mechanic/01_SW_Project/roboto_origin_2.0/*.SLD*", "/V2.0/roboto_origin_mechanic/01_SW_Project/roboto_origin_2.0/*.sld*"]
+        flatten: true
+        exclude: ["三合一(1).SLDASM"]   # 電源基板（ロボットの組立ではない）
+    verify:
+      solidworks/ATOM01总装配体重装.SLDASM: a5a63626edd8ca3b8ff1bfb68f4a9c0c16152d82a7d6532a1fb5841f6757b906
+    licenses:
+      hardware: CERN-OHL-W-2.0（LICENSE・LICENSES.md。CAD・中立形式・BOM・製造データ・URDF・メッシュ）
+      docs: CC-BY-SA-4.0（README・手引き・説明画像。ただし設計・製造の文書はハードの扱い）
+      software: 手順書の付録 3 は「核心源代码基于 GPL V3」（ソフトの話。ハードのライセンスとは別）
+      third_party: THIRD_PARTY_NOTICES.md — DM モータ・電池・ベアリング・GB/T のねじ・OPI-5PLUS・LB22SA2M1-M10 などの他社モデルは対象外。ライセンス不明のものは参照のみ（複製・改変・再配布しない）
+      trademarks: TRADEMARKS.md — 推薦・公認に見える使い方をしない
+    contents:
+      step: 部品単位のみ（CNC 27 種・治具・頭・PCB 載板。全体の STEP は無い。三合一.step は電源基板）
+      solidworks: SLDASM 5（総組立 ATOM01总装配体重装.SLDASM 61 MB）・SLDPRT 69
+      urdf: V2.0/roboto_origin_mechanic/03_URDF（リンク単位の STL 24）
+      bom: 散件清单 V1.1.3.xlsx 89 行（ねじはキットの袋の数）。V1.0 の BOM_Mechanical.xlsx はねじの使用数あり
+      manual: 安装手册_0428.pdf（中国語・44 頁・STEP 1〜67＋ピン標定 6、文字は抽出可）、走线说明.pdf（配線 10 頁）
+    notes:
+      - 手順書の「视频安装教程」の QR のリンクは未確認
+      - 集約リポジトリ Roboparty/roboto_origin（d94afba）の modules/rpo_hardware/ は同じ中身の写し
+      - 詳細は projects/robot-assembly-bench/notes/data-manifest-2026-11-09.md §2.1、cad-check/roboto-free-assembly-2026-11-10.md
+    derived:
+      - name: sw_asm
+        version: "2026-11-10"
+        from: sw_asm
+        desc: SLDASM の配置の XML と各 SLDPRT の表示用メッシュから、組立姿勢の部品ごとの STL（1,039 配置・854 メッシュ）と parts_manifest.json（部品座標 → URDF base_link の 4×4）
+        inputs: [raw/solidworks/, derived/urdf_zero@2026-11-10/, derived/part_stl@2026-11-10/]
+        tools: ["XRTC5/sldprt-export@31d3b5a（MIT、標準ライブラリだけの SolidWorks 読み取り器。中身を読んで確認済み）"]
+        scripts:
+          - projects/robot-assembly-bench/notes/data-scripts/roboto/sldasm_dump.py
+          - projects/robot-assembly-bench/notes/data-scripts/roboto/place_missing.py
+          - projects/robot-assembly-bench/notes/data-scripts/roboto/build_manifest.py
+          - projects/robot-assembly-bench/notes/data-scripts/roboto/link_components.py
+      - name: urdf_zero
+        version: "2026-11-10"
+        from: urdf_zero
+        desc: URDF のリンクのメッシュを関節 0 の姿勢に並べたもの（24 リンク。リンク単位で部品単位ではない）
+        inputs: [raw/rpo_hardware/V2.0/roboto_origin_mechanic/03_URDF/]
+        scripts: [projects/robot-assembly-bench/notes/data-scripts/roboto/urdf_assemble.py]
+      - name: part_stl
+        version: "2026-11-10"
+        from: part_stl
+        desc: 部品単位の STEP を三角形に分けた STL
+        inputs: [raw/rpo_hardware/V2.0/roboto_origin_mechanic/02_Manufacturing/]
+        scripts: [projects/robot-assembly-bench/notes/data-scripts/roboto/step_tess.py]
+      - name: register
+        version: "2026-11-10"
+        from: [reg_A.json, sw_vs_urdf.json]
+        desc: 部品の STL と URDF の 0 姿勢の位置合わせ（reg_A）と、SLDASM の配置との照合（sw_vs_urdf）
+        scripts:
+          - projects/robot-assembly-bench/notes/data-scripts/roboto/register_parts.py
+          - projects/robot-assembly-bench/notes/data-scripts/roboto/compare_sw_urdf.py
+      - name: text
+        version: "2026-11-10"
+        from: [rpo_v1_guide.txt, rpo_v2_manual.txt, rpo_v2_wire.txt]
+        desc: 手順書・配線書の PDF の文字（pdftotext）
+        scripts: []
+
+  asimov_v1:
+    role: test
+    desc: Menlo Research の人型（アクチュエータ 25）。全体の STEP（ねじ 973 を含む）と公開の Web 手順書
+    version: "43aa368a"
+    sources:
+      - method: git
+        repo: https://github.com/menloresearch/asimov-1
+        commit: 43aa368adebcce099c3d80d33b37df68b6d48bf1   # 2026-11-04
+        dest: asimov-1
+        include: ["/mechanical/ASV1/FullBodyAssembly/Asimov_1.STEP"]   # Git LFS（520 MB）
+      - method: snapshot
+        dest: docs_menlo_ai
+        url: https://docs.menlo.ai/asimov/1/
+        note: 公開の手順書ページ 100 枚の HTML を 2026-11-09 に保存（ログイン不要。本文は Next.js の埋め込みデータ）。ページは更新されうるので、取り直すと sha256 は変わる。手順は notes/data-manifest-2026-11-09.md §2.2
+    verify:
+      asimov-1/mechanical/ASV1/FullBodyAssembly/Asimov_1.STEP: 35903b20bffd0e21d709acc75a30d0ee98323fa6c76b59fefffd181471422ba7   # LFS の oid と一致
+    licenses:
+      hardware: CERN-OHL-S-2.0（HARDWARE-LICENSE.txt）
+      software: GPL-2.0（SOFTWARE-LICENSE.txt）
+      docs: docs.menlo.ai にライセンスの表記なし（引用・要約にとどめ、再配布しない）
+      third_party: 明記なし。全体の STEP の購入品（*_X のアクチュエータ EC-A3814、goBILDA らしい部品、McMaster の品番のねじ）に CERN-OHL-S が及ぶかは不明 → 再配布しない
+    gated:
+      - "BOM の表計算: Tally のフォーム（tally.so/r/jaG0va）でメール登録が要る。再配布・研究利用の条件の記載なし。自動で登録しない（取るかは人が決める）"
+    contents:
+      step: 全体 Asimov_1.STEP（SolidWorks 2026 の書き出し、葉 1184：ねじ・ナット・インサート 973、部品 191、サブアセンブリ 7）。部品単位の STEP 189 は未取得
+      bom: 表計算は登録が要る。代わりに公開の FABRICATION_MANIFEST.csv（部品 ID と STEP の対応。未取得）
+      manual: Web・英語、76 ステップ（動画での確認 6）、小指示 521、3D の指示ビュー 416
+    notes:
+      - FABRICATION_MANIFEST・mechanical/ASV1/Docs の PDF 26 は T14 で読んだが、キャッシュには入っていない（必要なら sources に足す）
+    derived:
+      - name: text
+        version: "2026-11-10"
+        from: [asimov_steps.json, asimov_text_tree.json, asimov_text_tree.txt]
+        desc: 手順書の HTML から取り出した工程（asimov_steps）と、STEP の文字列から取った組立の木
+        scripts:
+          - projects/robot-assembly-bench/notes/data-scripts/asimov_steps.py
+          - projects/robot-assembly-bench/notes/data-scripts/step_text_tree.py
+
+  openarm:
+    role: test
+    desc: Enactic の双腕（7 自由度 ×2、DAMIAO）。全体の STEP にねじ 400、英語の番号つき手順書
+    version: "1.0.1"
+    sources:
+      - method: url
+        url: https://github.com/enactic/openarm_hardware/releases/download/1.0.1/openarm-hardware-1.0.1.tar.gz
+        sha256: 955510c645eae7122cfab8e94974123577237583ac1ff827bf5a123ad8ee009e   # 公開値と一致。tag 1.0.1 → commit 0403835afae64949ede85e440e86a283b747b9dd
+        dest: openarm-hardware-1.0.1.tar.gz
+      - method: git
+        repo: https://github.com/enactic/openarm
+        commit: 365aab7d27ab75fb4a403f4b0a61352c37b00d17   # docs.openarm.dev のソース（2026-11-09）
+        dest: openarm_docs
+        include: ["/website/versioned_docs/version-1.0/hardware/", "/website/static/file/hardware/", "/website/static/img/hardware/assembly-guide/", "/website/static/img/hardware/bom/", "/website/static/img/hardware/wiring-and-casing-guide/", "/website/src/components/", "/LICENSE*", "/README.md"]
+    licenses:
+      hardware: CERN-OHL-S-2.0（openarm-hardware-1.0.1/LICENSE.txt、Copyright 2025 Enactic, Inc.）
+      docs: Apache-2.0（enactic/openarm の LICENSE。手順書の文章と画像）
+      third_party: 明記なし（MISUMI の購入品・DAMIAO のアクチュエータのモデル）→ 再配布しない
+    contents:
+      step: OpenArm01_follower.step（両腕＋台座、葉 542、ねじ 400、アクチュエータ 16 は簡略形）・OpenArm01_leader.step・部品単位。tar.gz のまま置く
+      bom: Web の表 83 行（MISUMI の型番つき）。CAD 名と 16/16 一致
+      manual: Web（MDX）・英語、番号つき 71＋配線・外装 19
+    notes:
+      - README は「正本は Google Drive、Releases はその写し」
+      - 2.0 の手順書は無い（1.0 系だけ）
+
+  xlerobot:
+    role: test
+    desc: SO-101 ×2 と LeKiwi を載せた移動双腕。固有部品は 8、腕・台車の手順は SO-101・LeKiwi に委譲
+    version: "b017b5e6"
+    sources:
+      - method: git
+        repo: https://github.com/Vector-Wangel/XLeRobot
+        commit: b017b5e6354bd9f61f4247a920c72622ca0aade0   # 2026-10-06。Releases は無い
+        dest: XLeRobot
+        include: ["/hardware/", "/docs/en/source/hardware/", "/docs/zh/source/hardware/", "/LICENSE", "/README.md", "/others/"]
+    licenses:
+      hardware: Apache-2.0（LICENSE。ハード専用の別ライセンスは無い）
+      docs: Apache-2.0
+      third_party: others/ の IKEA RÅSKOG・Anker の取説 PDF は他社の著作物（再配布しない）。手順書の画像は GitHub の user-attachments（未取得）
+    contents:
+      step: 部品単位 33（XLeRobot_040/XLeRobot040_armbase.step は固有部品 8 の組図、ねじ 0）。全体の STEP は無い
+      bom: Markdown 19 行（購入品のみ）
+      manual: Sphinx・英語、番号なし（節 12・箇条書き 39）。手順書は 0.3 系、STEP は 0.4.0
+    derived:
+      - name: text
+        version: "2026-11-10"
+        from: [xle_armbase_tree.txt]
+        desc: armbase の STEP の組立の木
+        scripts: [projects/robot-assembly-bench/notes/cad-check/step_tree.py]
+
+  toddlerbot:
+    role: dev
+    desc: Stanford の小型人型（Dynamixel）。手順書 PDF は 1.0、リポジトリの描写は 2.0
+    version: "e337f3b1"
+    link_as: data/raw/dev/toddlerbot
+    sources:
+      - method: git
+        repo: https://github.com/hshi74/toddlerbot
+        commit: e337f3b177b4b53abff70b31d1695a7b66cc6d2e   # 2026-04-19（2.0 の描写）
+        include: ["/toddlerbot/descriptions/toddlerbot_2xc/toddlerbot_2xc.*", "/toddlerbot/descriptions/toddlerbot_2xc/robot.yml", "/toddlerbot/descriptions/toddlerbot_2xc/assets/", "/LICENSE", "/README.md", "/CHANGELOG.md", "/docs/_static/positions_v8.csv", "/docs/_static/assembly_manual.pdf"]
+        map:
+          toddlerbot/descriptions/toddlerbot_2xc/: repo_e337f3b/
+          LICENSE: repo_e337f3b/LICENSE
+          README.md: repo_e337f3b/README.md
+          CHANGELOG.md: repo_e337f3b/CHANGELOG.md
+          docs/_static/positions_v8.csv: repo_e337f3b/positions_v8.csv
+          docs/_static/assembly_manual.pdf: assembly_manual_v1.pdf
+      - method: git
+        repo: https://github.com/hshi74/toddlerbot
+        commit: 59832cde2be3ab029486958f2e5ba92604f87307   # tag v1.0.0（手順書 PDF と同じ版の描写）
+        include: ["/toddlerbot/descriptions/assemblies/left_arm_active/", "/toddlerbot/descriptions/assemblies/left_leg_active/"]
+        map:
+          toddlerbot/descriptions/assemblies/: v1.0.0/assemblies/
+    local_files: ["v1.0.0/SHA256SUMS.txt", "v1.0.0/assemblies/*/_local.urdf"]
+    verify:
+      assembly_manual_v1.pdf: a33152254000f08a761fdb8724c92dfa9553d80af4618dfc0bcdb69dcf4ed362
+    licenses:
+      hardware: CC BY-NC-SA 4.0（README の License 節「design (Onshape document, STL files, etc.)」。描写のメッシュもこれに入ると読む）→ 非商用。調整用の注釈は外に出さないか、出すなら CC BY-NC-SA
+      software: MIT（LICENSE、codebase とドキュメント）
+      docs: MIT（手順書 PDF は docs/ にある。ただし図は設計の描画）
+    gated:
+      - "Onshape の文書（cad.onshape.com/documents/565bc33af293a651f66e88d2）は未ログインで signin へ転送。使わない"
+      - "MakerWorld の 3MF・tnkr.ai の 2.0 の手順書はアカウントの要否が未確認（人がブラウザで確かめる）"
+    contents:
+      step: 無い（STEP の前処理は通らない）
+      urdf: 2.0 の toddlerbot_2xc（リンクのメッシュ 43、部品名なし、12 リンクは 62,912 面に間引き）。1.0 の assemblies（left_arm_active・left_leg_active）
+      bom: 公開の Google Sheet（CSV に書き出せる。未取得）
+      manual: assembly_manual_v1.pdf（11 頁・英語・39 ステップ、1.0 の版）
+    derived:
+      - name: urdf_zero
+        version: "2026-11-10"
+        from: urdf_zero
+        desc: 2.0 の描写を関節 0 に並べたもの（リンク 45）
+        scripts: [projects/robot-assembly-bench/notes/data-scripts/roboto/urdf_assemble.py]
+      - name: v1_assemblies_zero
+        version: "2026-11-10"
+        from: [v1_left_arm_active, v1_left_leg_active]
+        desc: 1.0 の部分組立（左腕・左脚）を関節 0 に並べたもの
+        scripts: [projects/robot-assembly-bench/notes/data-scripts/roboto/urdf_assemble.py]
+      - name: l0_preprocess
+        version: "2026-11-10"
+        location: project
+        outputs: [data/derived/dev/toddlerbot/v2_full_raw, data/derived/dev/toddlerbot/v2_full_cut, data/derived/dev/toddlerbot/v1_left_arm_active_raw, data/derived/dev/toddlerbot/v1_left_arm_active_cut, data/derived/dev/toddlerbot/v1_left_leg_active_raw, data/derived/dev/toddlerbot/v1_left_leg_active_cut]
+        desc: T20 の共通の前処理（L0。部品ごとのメッシュ・食い込みの削り・ねじ → 締結）。設定は本番の前に凍結する予定なので、凍結までプロジェクトの中に置く
+        scripts: [projects/robot-assembly-bench/src/rabench/geom/preprocess.py]
+
+  poppy_humanoid:
+    role: dev
+    desc: Poppy Project の人型（Dynamixel MX-28、2016 年の版）。全体の STEP、手順は主に動画
+    version: "1.0.2"
+    link_as: data/raw/dev/poppy_humanoid
+    sources:
+      - method: url
+        url: https://github.com/poppy-project/poppy-humanoid/releases/download/1.0.2/Poppy_Humanoid.STEP
+        dest: Poppy_Humanoid.STEP
+        sha256: 10e9d997f82787d4069f7edd4b88ec3ab6dcc51cb1686d761d84add709d38266   # 2026-11-10 の取得時の値（tag 1.0.2 → commit b9bdd8f3）
+    local_files: [tree.json]   # notes/cad-check/step_tree.py の出力
+    licenses:
+      hardware: CC BY-SA 4.0（hardware/LICENSE.md。GitHub の判定は空）
+      software: GPL-3.0（software/LICENSE）
+      docs: poppy-docs（CC BY-SA 4.0 と読む。未確認）
+    contents:
+      step: Poppy_Humanoid.STEP（187 MB、SolidWorks 2013、AP214、部分組立 28・葉 202、ねじは 30 本だけ）
+      manual: poppy-docs の assembly-guides（章 1〜9、腕・胴は動画 25 本、脚は部品表＋動画）。番号つきの文字の工程はほぼ無い
+    derived:
+      - name: l0_preprocess
+        version: "2026-11-10"
+        location: project
+        outputs: [data/derived/dev/poppy_humanoid/full_raw, data/derived/dev/poppy_humanoid/full_cut]
+        desc: T20 の共通の前処理（L0）。凍結までプロジェクトの中に置く
+        scripts: [projects/robot-assembly-bench/src/rabench/geom/preprocess.py]
+
+  orca_v2:
+    role: dev
+    desc: ORCA Hand v2（腱駆動のハンド、Dynamixel XC330）。全体の STEP にピン・ねじ 107
+    version: "0ce26465"
+    link_as: data/raw/dev/orca_v2
+    sources:
+      - method: git
+        repo: https://github.com/orcahand/orcahand_hardware
+        commit: 0ce26465a4f67c8ab3391cf157853ac24b1fb9c1   # 2026-10-26
+        include: ["/orca_v2/base/Orcahand_BaseV2_Left.zip"]
+        map:
+          orca_v2/base/Orcahand_BaseV2_Left.zip: Orcahand_BaseV2_Left.zip
+      - method: unzip
+        from: Orcahand_BaseV2_Left.zip
+        dest: x
+    local_files: [base_left_tree.json]   # notes/cad-check/step_tree.py の出力
+    verify:
+      x/Base_Left.step: 624449b7c5a1ebd6abb7d64fd07f4066343c22d8f12fef4de19cb01701f3e618
+    licenses:
+      hardware: CC BY 4.0（LICENSE「all files in this repository, including CAD/STL/3MF hardware designs and source code」。GitHub の判定は NOASSERTION）
+      software: CC BY 4.0（同上）
+    contents:
+      step: Base_Left.step（109 MB、Fusion の書き出し、葉 762、ピン PHS_1_7X20 ×60 など）
+      manual: YouTube 1 時間 32 分＋ASSEMBLY_ADDENDUM.md（未取得）
+    derived:
+      - name: l0_preprocess
+        version: "2026-11-10"
+        location: project
+        outputs: [data/derived/dev/orca_v2/full_raw, data/derived/dev/orca_v2/full_cut, data/derived/dev/orca_v2/mod_I-L]
+        desc: T20 の共通の前処理（L0）。L2 の判定器（src/rabench/l2/check.py）が full_cut を読む。凍結までプロジェクトの中に置く
+        scripts: [projects/robot-assembly-bench/src/rabench/geom/preprocess.py]
+
+  amazing_hand:
+    role: dev
+    desc: Pollen Robotics のハンド（参考。組立は Onshape、部品単位の STEP のみ）
+    version: "3e824107"
+    link_as: data/raw/dev/amazing_hand
+    sources:
+      - method: url
+        url: https://raw.githubusercontent.com/pollen-robotics/AmazingHand/3e8241074df3436a3044ced4881e3bb2133aa725/cad/step/Amazing%20Hand%20base.STEP
+        dest: Amazing_Hand_base.STEP
+        sha256: c43a18930fedd13d33f21e6aa878b6a6153aed8fdfd36d2c147ee3939dbfb7f9
+    licenses:
+      hardware: CC BY 4.0（README「Mechanical design」）
+      software: Apache-2.0
+    contents:
+      step: Amazing Hand base.STEP（単一の固体）。部品単位の STEP は cad/step/
+      manual: docs/AmazingHand_Assembly.pdf（未取得）
+    notes:
+      - Feetech SCS0009（テスト機の STS3215 とは別型）。SO-ARM_Interface.step は使わない
+      - 開発用の候補から外した（組み付けた位置の CAD が無い）
+
+  so101:
+    role: other
+    desc: TheRobotStudio SO-ARM100 の SO-101（Feetech STS3215 ×6）。T10・T12 の小さな試しに使った
+    version: "a758567c"
+    sources:
+      - method: git
+        repo: https://github.com/TheRobotStudio/SO-ARM100
+        commit: a758567c3978dfeefe282ede0500085a48fe8f78   # 2026-10-06（notes/ir-trial/so100.yaml と同じ）
+        dest: SO-ARM100
+        include: ["/STEP/SO101/", "/LICENSE", "/README.md"]
+    licenses:
+      hardware: Apache-2.0（LICENSE）
+      docs: Apache-2.0
+    contents:
+      step: SO101 Assembly.step（20 MB、follower の全体）＋部品単位 15（共通 9・follower 2・leader 3・Seeed 用プレート 1）
+      manual: README と HF LeRobot の手順書（未取得）
+    notes:
+      - XLeRobot の腕はこれ。LeKiwi の上にも載る
+
+  lekiwi:
+    role: other
+    desc: SIGRobotics-UIUC の LeKiwi（3 輪のオムニ台車＋SO-101）。手順書は Markdown
+    version: "efa608d7"
+    sources:
+      - method: git
+        repo: https://github.com/SIGRobotics-UIUC/LeKiwi
+        commit: efa608d7ee5a495a4803b1d28cd0c955b4f1e033   # 2026-08-05（notes/ir-trial/lekiwi.yaml と同じ）
+        dest: LeKiwi
+        include: ["/Assembly.md", "/BOM.md", "/3DPrinting.md", "/LICENSE.txt", "/README.md", "/URDF/"]
+    licenses:
+      hardware: Apache-2.0（LICENSE.txt）
+      docs: Apache-2.0
+    contents:
+      step: 無い（3DPrintMeshes に STL）
+      urdf: URDF/
+      manual: Assembly.md（英語）
+    notes:
+      - まだ取得していない（必要になったら rl robot fetch lekiwi）
+
+  rebot_t701:
+    role: other            # 候補（P1 の計画を固めたあとに出る機種。使い方は未定）
+    pending: "2026-11-11 時点では完成予想の画像だけ。README の予定では 2026-11 に仕様・全体の STEP と 101 部品・部品表・写真と文章の組立手順書・URDF・Python の SDK、2027-12 に MJCF・USD と LeRobot・ROS 2 の連携"
+    desc: Seeed Studio の双腕（胴体に 7 自由度 ×2 ＋平行グリッパ ×2、CAN の関節、手首に RealSense D405 ×2・頭に D435、Jetson Orin の取り付け）。SO-Arm・reBot Arm B601 の後継。OpenArm に近い構成
+    version: "pending"
+    repo: https://github.com/Seeed-Projects/reBot-Arm-T701
+    licenses:
+      hardware: CERN-OHL-W-2.0（リポジトリの LICENSE）
+    notes:
+      - 状態はベータの予告。価格は未発表（キットと組み立て済みの品を準備中）
+      - 計画を固めたあと（G2 のあと）に CAD と手順書が出れば、前処理や判定器をこの機種に合わせて調整していない、きれいな追加のテストの機種になりうる（扱いは人が決める）
+      - 実機が手ごろなら P2'（同じ機種を組む）の実機の候補
+    sources: []

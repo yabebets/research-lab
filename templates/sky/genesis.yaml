@@ -1,0 +1,19 @@
+# SkyPilot のタスク定義：genesis（rl sim setup genesis でプロジェクトの configs/sky/ に写し、rl gpu up <project> configs/sky/genesis.yaml --hours H --usd-per-hour X で立てる）
+# G2（計画と予算の承認）のあとでだけ使う。使い終わったら rl gpu down（放置は自動で消える）
+name: rl-genesis
+
+resources:
+  infra: runpod            # lambda にするなら lambda
+  accelerators: {L4: 1, A10: 1, L40S: 1}
+  disk_size: 200
+
+workdir: .
+
+envs:
+  MAX_HOURS: 4             # rl gpu up が --hours で上書きする
+
+setup: |
+  pip install -q "genesis-world>=1"
+
+run: |
+  timeout "${MAX_HOURS}h" python -m src.run_sim   # 実験のスクリプトに置き換える

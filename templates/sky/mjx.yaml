@@ -1,0 +1,22 @@
+# SkyPilot のタスク定義：mjx（rl sim setup mjx でプロジェクトの configs/sky/ に写し、rl gpu up <project> configs/sky/mjx.yaml --hours H --usd-per-hour X で立てる）
+# G2（計画と予算の承認）のあとでだけ使う。使い終わったら rl gpu down（放置は自動で消える）
+name: rl-mjx
+
+resources:
+  infra: runpod            # lambda にするなら lambda
+  accelerators: {L4: 1, A10: 1, L40S: 1}
+  disk_size: 100
+
+workdir: .
+
+envs:
+  MAX_HOURS: 4             # rl gpu up が --hours で上書きする
+
+setup: |
+  pip install -q uv
+  # 版は sims.lock.yaml と sims/catalog.yaml に合わせる（mujoco と mujoco-mjx は同じ版）
+  uv pip install --system -q "mujoco==4.0.0" "mujoco-mjx==4.0.0" "jax[cuda12]"
+  python -c "import jax; print(jax.devices())"
+
+run: |
+  timeout "${MAX_HOURS}h" python -m src.run_sim   # 実験のスクリプトに置き換える

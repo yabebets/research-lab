@@ -1,0 +1,30 @@
+# SkyPilot のタスク定義：openvla-oft。rl sim setup openvla-oft でプロジェクトの configs/sky/ に写し、rl gpu up <project> configs/sky/openvla-oft.yaml --hours H --usd-per-hour X で立てる
+# G2（計画と予算の承認）のあとでだけ使う。使い終わったら rl gpu down（放置は自動で消える）
+# 重みは HF のタグが MIT。土台の Llama 2 7B の利用条件は別に確かめる
+name: rl-openvla-oft
+
+resources:
+  infra: runpod            # lambda にするなら lambda
+  accelerators: {A100-80GB: 1, H100: 1}
+  disk_size: 300
+
+workdir: .
+
+envs:
+  MAX_HOURS: 4             # rl gpu up が --hours で上書きする
+  OFT_COMMIT: e4287e94541f459edc4feabc4e181f537cd569a8
+
+setup: |
+  pip install -q uv
+  # SETUP.md の手順（Python 3.10、torch、pip install -e .、flash-attn 2.5.5）を uv で
+  [ -d ~/oft ] || uv venv -q --python 3.10 ~/oft
+  . ~/oft/bin/activate
+  uv pip install -q torch torchvision torchaudio
+  [ -d openvla-oft ] || git clone -q https://github.com/moojink/openvla-oft
+  cd openvla-oft && git checkout -q "$OFT_COMMIT" && uv pip install -q -e .
+  uv pip install -q packaging ninja && uv pip install -q "flash-attn==2.5.5" --no-build-isolation
+
+run: |
+  . ~/oft/bin/activate
+  cd openvla-oft
+  timeout "${MAX_HOURS}h" python vla-scripts/finetune.py --help   # 実験の設定に置き換える（LIBERO の例は LIBERO.md）

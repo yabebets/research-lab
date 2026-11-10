@@ -145,7 +145,8 @@ def look_crossref(doi: str):
     msg = json.loads(data).get("message", {})
     title = (msg.get("title") or [""])[0]
     au = msg.get("author") or [{}]
-    year = str(((msg.get("issued") or {}).get("date-parts") or [[""]])[0][0])
+    parts = ((msg.get("issued") or {}).get("date-parts") or [[None]])[0] or [None]
+    year = str(parts[0]) if parts[0] is not None else ""   # Crossref に年が無いと [[None]] が返る
     return {"title": title, "first_author": au[0].get("family", ""), "year": year, "via": f"doi:{doi}"}
 
 
@@ -214,7 +215,7 @@ def check(e: dict) -> dict:
     s = sim(title, found["title"])
     res.update(found_title=found["title"], found_year=found["year"], found_first_author=found["first_author"],
                via=found["via"], title_similarity=round(s, 3))
-    year_ok = not e.get("year") or not found["year"] or abs(int(re.sub(r"\D", "", e["year"]) or 0) - int(found["year"] or 0)) <= 1
+    year_ok = not e.get("year") or not found["year"] or abs(int(re.sub(r"\D", "", e["year"]) or 0) - int(re.sub(r"\D", "", found["year"]) or 0)) <= 1
     fa_bib = first_author_last(e.get("author", ""))
     fa_ok = not fa_bib or not found["first_author"] or fa_bib in norm(found["first_author"])
     if s >= 0.9 and year_ok and fa_ok:

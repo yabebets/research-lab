@@ -1,0 +1,184 @@
+# 言語モデルの登録簿（lib/rlkit/llm.py と rl llm が読む）
+#
+# - 価格は 100 万トークンあたりの USD。必ず出典の URL と確認した日を書く。価格が null のモデルは呼べない（費用が数えられないため）
+# - params.allowed にない引数・params.forbidden の引数は、送る前に手元で止める（400 で 1 回分の記録が無駄になるのを防ぐ）
+# - image_tokens は予算の事前見積もりにだけ使う。費用は応答の usage の実数で数える
+# - 新しいモデルを足したら `rl llm models` と `rl llm ping <key> --dry-run` で確かめる
+
+defaults:            # call("anthropic", ...) のように会社名で呼んだときのモデル
+  anthropic: claude-opus-5-5
+  openai: gpt-5
+  qwen: qwen3-vl-plus
+
+models:
+  claude-opus-5-5:
+    label: Claude Opus 5.5
+    provider: anthropic
+    model_id: claude-opus-5-5
+    auth: "ANTHROPIC_API_KEY、ANTHROPIC_AUTH_TOKEN、どちらも無ければ `ant auth login` のプロファイル（SDK が自動で読む）"
+    api_key_env: [ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN]
+    api_key_optional: true          # ant のプロファイルで動くので、環境変数が無くても止めない
+    images: true
+    context_tokens: 1000000
+    max_output_tokens: 128000
+    stream: true                    # 長い出力で HTTP がタイムアウトしないよう常に streaming（get_final_message）
+    prices:
+      input: 4.00
+      output: 20.00
+      cache_write_5m: 5.00
+      cache_write_1h: 8.00
+      cache_read: 0.20              # 入力の 0.05 倍
+      batch_input: 2.00
+      batch_output: 10.00
+    price_source:
+      url: https://platform.claude.com/docs/en/about-claude/pricing
+      checked: 2026-11-10
+      note: "表の Claude Opus 5.5 の行。cache hits は 0.05x（脚注 2）"
+    image_tokens:                   # 高解像度の段（Claude 4.7 以降）。28 px 四方で 1 トークン
+      patch_px: 28
+      max_long_edge_px: 2576
+      max_tokens: 4784
+      source: https://platform.claude.com/docs/en/build-with-claude/vision
+    effort:
+      param: output_config.effort
+      values: [low, medium, high, xhigh, max]
+      default: medium               # API の既定も medium（Opus 5 の high より 1 段低い）。記録のため常に明示して送る
+    params:
+      allowed: [thinking_display, cache_ttl, stop_sequences, metadata]
+      forbidden:
+        temperature: "Opus 5.5 は temperature を受け付けない（400）。標本の違いは sample_index で数える"
+        top_p: "Opus 5.5 は top_p を受け付けない（400）"
+        top_k: "Opus 5.5 は top_k を受け付けない（400）"
+        thinking_disabled: "Opus 5.5 は思考を切れない（{type: disabled} も budget_tokens も 400）。effort を下げる"
+        budget_tokens: "Opus 5.5 では廃止（400）。effort を使う"
+        tool_choice: "強制の tool_choice（any / tool）は 400。auto（既定）＋ strict な道具＋プロンプトで指示する"
+        prefill: "最後の assistant の書き出し（prefill）は 400"
+    strict_tools: true
+    fallbacks: none                 # ベンチマークでは別モデルへの自動の切り替えをしない（docs/pending/llm.md）
+    refusal: "stop_reason == refusal（HTTP 200）。stop_details.category は cyber / bio / reasoning_extraction など"
+
+  gpt-5:
+    label: GPT-5
+    provider: openai
+    model_id: gpt-5
+    auth: OPENAI_API_KEY
+    api_key_env: [OPENAI_API_KEY]
+    base_url: null                  # 既定の https://api.openai.com/v1
+    api: chat.completions
+    images: true
+    system_role: developer          # 推論モデルでは system ではなく developer
+    max_tokens_param: max_completion_tokens   # 推論のトークンも含む上限
+    stream: false
+    prices:
+      input: 1.25
+      output: 10.00                 # 推論のトークンも出力として課金
+      cache_read: 0.125             # 自動のプロンプトキャッシュ（1024 トークン以上）
+      batch_input: 0.625
+      batch_output: 5.00
+    price_source:
+      url: https://developers.openai.com/api/docs/pricing
+      checked: 2026-11-10
+      note: "Standard の表の gpt-5 の行（$1.25 / $10.00 / cached $0.125）"
+    image_tokens:                   # 見積もり用の保守的な近似（512 px のタイル 1 枚 170 + 基本 85、高精細）
+      tile_px: 512
+      base_tokens: 85
+      tokens_per_tile: 170
+      fit_px: 2048
+      short_side_px: 768
+      source: "見積もり用。課金は usage.prompt_tokens の実数"
+    image_detail: high
+    effort:
+      param: reasoning_effort
+      values: [minimal, low, medium, high]
+      default: medium
+    params:
+      allowed: [verbosity, stop, prompt_cache_key, seed, metadata]
+      forbidden:
+        temperature: "GPT-5（推論モデル）は既定値 1 以外の temperature を受け付けない。送らない"
+        top_p: "推論モデルでは受け付けない"
+        presence_penalty: "推論モデルでは受け付けない"
+        frequency_penalty: "推論モデルでは受け付けない"
+        logprobs: "推論モデルでは受け付けない"
+        max_tokens: "推論モデルは max_completion_tokens を使う（call の max_tokens はこちらに入れて送る）"
+    param_source:
+      url: https://developers.openai.com/api/docs/guides/reasoning
+      checked: 2026-11-10
+      note: "effort の値はモデルごとに違う（none / minimal / low / medium / high / xhigh / max のうち一部）。gpt-5 の値と禁止の引数は最初の ping で確かめる（未確認）"
+    strict_tools: true
+    refusal: "message.refusal（文字列）か finish_reason == content_filter"
+
+  qwen3-vl-plus:
+    label: Qwen3-VL Plus（DashScope 国際版）
+    provider: qwen
+    model_id: qwen3-vl-plus
+    auth: DASHSCOPE_API_KEY
+    api_key_env: [DASHSCOPE_API_KEY]
+    base_url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+    api: chat.completions
+    images: true
+    system_role: system
+    max_tokens_param: max_tokens
+    stream: true                    # 思考モードで streaming を求めるモデルがあるため。usage は stream_options.include_usage で受け取る
+    weights: "API の Plus はホスト版。重みが公開されたのは Qwen/Qwen3-VL-235B-A22B-*（下の vllm を参照）"
+    prices:                         # 1 回の入力トークン数で段が決まり、その回の全トークンがその段の単価
+      tiers:
+        - {max_input_tokens: 32000, input: 0.20, output: 1.60}
+        - {max_input_tokens: 128000, input: 0.30, output: 2.40}
+        - {max_input_tokens: 256000, input: 0.60, output: 4.80}
+      cache_read_ratio: 0.20        # 暗黙のキャッシュの命中は入力単価の 20%（明示のキャッシュなら 10%）
+    price_source:
+      url: https://www.alibabacloud.com/help/en/model-studio/model-pricing
+      checked: 2026-11-10
+      note: "International（Singapore）の qwen3-vl-plus。思考あり・なしで同じ単価。キャッシュは https://www.alibabacloud.com/help/en/model-studio/context-cache。1 回 約 3 万トークンだと 32K の段の境目に近い（超えると 1.5 倍）"
+    image_tokens:                   # Qwen3-VL は 32 px 四方で 1 トークン（patch 16 × merge 2）。見積もり用
+      patch_px: 32
+      max_tokens: 16384
+      source: "見積もり用。課金は usage の実数"
+    effort:
+      param: extra_body.enable_thinking
+      values: ["off", "on"]
+      map: {"off": false, "on": true}
+      default: "on"                 # 他の 2 つも考えてから答えるので、そろえて思考ありを既定にする（plan.md で固定する）
+    params:
+      allowed: [thinking_budget, stop, seed, vl_high_resolution_images]
+      forbidden:
+        temperature: "3 つのモデルで条件をそろえるため送らない（Opus 5.5 は受け付けない）"
+        top_p: "同上"
+        top_k: "同上"
+    strict_tools: false             # DashScope の互換 API の strict は未確認
+    refusal: "HTTP 400 の data_inspection_failed（内容の検査）か finish_reason == content_filter"
+
+  qwen3-vl-235b-a22b-instruct-vllm:
+    label: Qwen3-VL-235B-A22B-Instruct（借りた GPU の vLLM）
+    provider: qwen
+    model_id: Qwen/Qwen3-VL-235B-A22B-Instruct
+    auth: "VLLM_API_KEY（vllm serve --api-key を付けたときだけ）"
+    api_key_env: [VLLM_API_KEY]
+    api_key_optional: true
+    base_url_env: RL_VLLM_BASE_URL  # 例 http://<rl gpu up のクラスタ>:8000/v1
+    base_url: http://localhost:8000/v1
+    api: chat.completions
+    images: true
+    system_role: system
+    max_tokens_param: max_tokens
+    stream: false
+    self_hosted: true               # API の費用は 0。GPU の費用は rl gpu（budget.gpu_usd）で数える
+    weights: "https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Instruct（重みの revision を run.yaml に残す）"
+    prices: {input: 0, output: 0, cache_read: 0}
+    price_source:
+      url: null
+      checked: 2026-11-10
+      note: "自前のサーバー。費用は GPU 時間（rl gpu）"
+    image_tokens:
+      patch_px: 32
+      max_tokens: 16384
+      source: "見積もり用"
+    effort: null                    # Instruct は思考なし。思考ありは -Thinking の別の重み
+    params:
+      allowed: [stop, seed, chat_template_kwargs]
+      forbidden:
+        temperature: "3 つのモデルで条件をそろえるため送らない。vLLM の既定（generation_config）を run.yaml に残す"
+        top_p: "同上"
+        top_k: "同上"
+    strict_tools: false
+    refusal: "finish_reason == content_filter（ふつうは出ない）"
