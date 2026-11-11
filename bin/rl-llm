@@ -1,0 +1,138 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["ruamel.yaml>=0.18", "anthropic>=2.7", "openai>=3.48"]
+# ///
+"""rl llm — 言語モデルの登録簿・費用・予算（lib/rlkit/llm.py）
+
+  rl llm models                              登録簿（llm/models.yaml）と鍵の有無（値は出さない）
+  rl llm ping <model> --dry-run [--image P] [--prompt T] [--effort E] [--max-tokens N]
+                                             送る要求をそのまま表示（通信しない）。--dry-run なしは 1 回だけ実際に呼ぶ（有料・予算の確認あり）
+  rl llm usage [project] [--json]            使った額（モデル別・実行別・日別）
+  rl llm budget [project] [--json]           上限・使用・残り
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "lib"))
+from rlkit import llm  # noqa: E402
+from rlkit.common import die  # noqa: E402
+
+
+def _price(cfg) -> str:
+    p = cfg.get("prices") or {}
+    if cfg.get("self_hosted"):
+        return "自前（GPU 時間）"
+    if p.get("tiers"):
+        t = p["tiers"][0]
+        return f"${t['input']}/${t['output']}（段あり）"
+    if p.get("input") is None:
+        return "未登録"
+    cr = p.get("cache_read")
+    return f"${p['input']}/${p['output']}" + (f" 読${cr}" if cr is not None else "")
+
+
+def cmd_models(a):
+    reg = llm.load_registry()
+    rows = [("名前", "会社", "モデル ID", "画像", "入力/出力 $/1M", "価格の確認", "鍵")]
+    for k, c in reg["models"].items():
+        src = c.get("price_source") or {}
+        rows.append((k, c["provider"], c["model_id"], "○" if c.get("images") else "-", _price(c),
+                     str(src.get("checked") or "-"), llm.key_status(c)))
+    w = [max(len(str(r[i])) for r in rows) for i in range(len(rows[0]))]
+    for r in rows:
+        print("  ".join(str(x).ljust(w[i]) for i, x in enumerate(r)))
+    print(f"\n既定: {reg.get('defaults')}\n出典は llm/models.yaml の price_source。使う前に価格の確認日を見る")
+
+
+def cmd_ping(a):
+    prompt = a.prompt or "Reply with the single word: pong"
+    pr = llm.prepare(a.model, prompt, images=a.image or None, max_tokens=a.max_tokens, effort=a.effort)
+    if a.dry_run:
+        print(json.dumps({"model": pr["key"], "provider": pr["cfg"]["provider"],
+                          "request_sha256": pr["request_sha256"], "body": pr["body"],
+                          "images": pr["images"], "est_input_tokens": pr["est_input_tokens"],
+                          "est_max_cost_usd": pr["est_max_cost_usd"], "key": llm.key_status(pr["cfg"]),
+                          "note": "dry-run：送っていない。画像は rl-image:sha256:<hex> の参照で表示（送るときに base64 に置き換える）"},
+                         ensure_ascii=False, indent=2, default=str))
+        return
+    r = llm.call(a.model, prompt, images=a.image or None, max_tokens=a.max_tokens, effort=a.effort,
+                 budget_project=a.project, cache=False, meta={"purpose": "rl llm ping"})
+    print(json.dumps({"text": r.text, "stop_reason": r.stop_reason, "refusal": r.refusal,
+                      "model_returned": r.model_returned, "usage": r.usage, "cost_usd": r.cost_usd,
+                      "latency_s": r.latency_s, "log": r.log_path}, ensure_ascii=False, indent=2))
+
+
+def _table(title, d):
+    print(f"\n## {title}")
+    print(f"{'':28} {'回数':>6} {'API':>6} {'命中':>6} {'拒否':>4} {'失敗':>4} {'入力':>10} {'出力':>9} {'読込':>10} {'書込':>9} {'USD':>9}")
+    for k, v in d.items():
+        print(f"{str(k)[:28]:28} {v['calls']:>6} {v['api_calls']:>6} {v['cache_hits']:>6} {v['refusals']:>4} {v['errors']:>4} "
+              f"{v['input_tokens']:>10} {v['output_tokens']:>9} {v['cache_read_tokens']:>10} {v['cache_write_tokens']:>9} "
+              f"{v['cost_usd']:>9.4f}")
+
+
+def cmd_usage(a):
+    proj = llm.resolve_project_dir(a.project)
+    s = llm.usage_summary(proj)
+    if a.json:
+        print(json.dumps(s, ensure_ascii=False, indent=2))
+        return
+    print(f"# {proj.name} の言語モデルの使用（入力はキャッシュに当たらなかった分。命中＝手元の応答のキャッシュで 0 円）")
+    if not s["total"]:
+        print("記録なし")
+        return
+    _table("合計", {"total": s["total"]})
+    _table("モデル別", s["by_model"])
+    _table("実行別", s["by_run"])
+    _table("日別", s["by_day"])
+
+
+def cmd_budget(a):
+    st = llm.budget_status(llm.resolve_project_dir(a.project))
+    if a.json:
+        print(json.dumps(st, ensure_ascii=False, indent=2))
+        return
+    if st["cap"] is None:
+        print(f"{st['project']}: budget.llm_usd_cap が未設定（使用 ${st['spent']:.2f}、{st['calls']} 回）。G2 で決めて research.yaml に書く")
+        sys.exit(1)
+    pct = 100 * st["spent"] / st["cap"] if st["cap"] else 0
+    print(f"{st['project']}: 上限 ${st['cap']:.2f}（{st['source']}）  使用 ${st['spent']:.2f}（{pct:.1f}%）  "
+          f"残り ${st['remaining']:.2f}  記録 {st['calls']} 回" + (f"  集計の起点 {st['since']}" if st["since"] else ""))
+    if st.get("halt_ratio"):
+        print(f"止める割合: {st['halt_ratio']}（${st['cap'] * float(st['halt_ratio']):.2f} で送らなくなる）")
+    if pct >= 80:
+        print("80% を超えています。止まって相談する（plan.md §7）")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="rl llm", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("models").set_defaults(fn=cmd_models)
+    p = sub.add_parser("ping")
+    p.add_argument("model")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--prompt")
+    p.add_argument("--image", action="append")
+    p.add_argument("--effort")
+    p.add_argument("--max-tokens", type=int, default=1024)
+    p.add_argument("--project")
+    p.set_defaults(fn=cmd_ping)
+    for name, fn in (("usage", cmd_usage), ("budget", cmd_budget)):
+        p = sub.add_parser(name)
+        p.add_argument("project", nargs="?")
+        p.add_argument("--json", action="store_true")
+        p.set_defaults(fn=fn)
+    a = ap.parse_args()
+    try:
+        a.fn(a)
+    except (llm.LLMError, ValueError) as e:
+        die(str(e))
+
+
+if __name__ == "__main__":
+    main()

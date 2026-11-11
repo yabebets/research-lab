@@ -1,0 +1,22 @@
+# SkyPilot のタスク定義：mujoco-warp（rl sim setup mujoco-warp でプロジェクトの configs/sky/ に写し、rl gpu up <project> configs/sky/mujoco-warp.yaml --hours H --usd-per-hour X で立てる）
+# G2（計画と予算の承認）のあとでだけ使う。使い終わったら rl gpu down（放置は自動で消える）
+name: rl-mujoco-warp
+
+resources:
+  infra: runpod            # lambda にするなら lambda
+  accelerators: {L4: 1, A10: 1, L40S: 1}
+  disk_size: 100
+
+workdir: .
+
+envs:
+  MAX_HOURS: 4             # rl gpu up が --hours で上書きする
+
+setup: |
+  pip install -q uv
+  # 版は sims/catalog.yaml に合わせる（mujoco と mujoco-warp は同じ版。ソースが要るときは commit 4d1c64bc を使う）
+  uv pip install --system -q "mujoco==4.0.0" "mujoco-warp==4.0.0"
+  python -c "import warp as wp; wp.init(); print(wp.get_cuda_devices())"
+
+run: |
+  timeout "${MAX_HOURS}h" python -m src.run_sim   # 実験のスクリプトに置き換える

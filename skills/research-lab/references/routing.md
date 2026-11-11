@@ -7,6 +7,8 @@
 
 | 作業 | スキル |
 |---|---|
+| 興味の範囲から研究テーマの候補を出す（問いの前） | ★ `research-themes`（条件を聞く → 棚卸し → 交点 → テーマのカード） |
+| テーマを論文・プロジェクトの単位に切る（幹・並び・依存・資産） | ★ `research-program`（`notes/program.md`。1 論文 = 1 プロジェクト） |
 | 文献を広く集めて整理する | ★ `ml-lit-review` → ◆ ARIS `research-lit`（arXiv / Semantic Scholar / OpenAlex） |
 | 1 本の論文をすばやく理解する | ◆ ARIS `alphaxiv`、`arxiv` |
 | アイデアを出す（ML 全般） | ◆ ARIS `idea-discovery` `idea-creator`、Orchestra `21-research-ideation/*` |
@@ -14,6 +16,7 @@
 | 新規性を確かめる | ◆ ARIS `novelty-check` |
 | アイデアを潰しにかかる | ◆ ARIS `kill-argument` |
 | 研究の問いを磨く | ◆ ARIS `research-refine` `research-refine-pipeline` |
+| 研究の背景と動機を Introduction の形で書く（G1 のあと） | `research-lab/references/introduction.md` ＋ ★ `research-paper-writing`（`references/introduction.md`）＋ ★ `ml-lit-review`（出典の確認） |
 
 ## 計画・実験
 
@@ -23,6 +26,10 @@
 | GPU の確保・費用・片付け（RunPod / Lambda） | ★ `gpu-cloud` |
 | 計画をコードにする | ◆ ARIS `experiment-bridge` `research-implement-feature` |
 | 実行・キュー・監視 | ◆ ARIS `run-experiment` `experiment-queue` `monitor-experiment` `training-check`（`gpu: remote` で `gpu-cloud` の SSH 先を使う） |
+| 実行の記録・test の回数・事前登録の固定 | `rl run exec`（runs/<run_id>/ を作る）・`rl prereg freeze / check`（書式は `research-lab/references/ledger.md`） |
+| 実験の中で言語モデルを呼ぶ（記録・費用・予算） | `lib/rlkit/llm.py` の `call()`・`tool_loop()`、登録簿は `llm/models.yaml`、確認は `rl llm`。Claude のコードは ★ `claude-api` |
+| 手順書・データから正解（ラベル）を作る | `research-lab/references/annotation.md`（`rl annotate`）＋ ★ `ml-rigor`（一致の κ・α） |
+| ロボットの公開データ（CAD・手順書・部品表）を使う | `rl robot fetch / link`（`robots/catalog.yaml`）＋ ★ `physical-ai-research` |
 | 学習・微調整 | Orchestra `03-fine-tuning/*`（peft、unsloth、axolotl、llama-factory）、`06-post-training/*`（trl、grpo、verl、openrlhf） |
 | 分散学習・最適化 | Orchestra `08-distributed-training/*`、`10-optimization/*`（flash-attention、量子化、`ml-training-recipes`） |
 | モデル構造・小さく試す | Orchestra `01-model-architecture/*`（nanogpt、litgpt、mamba） |
@@ -38,7 +45,7 @@
 
 | 作業 | スキル |
 |---|---|
-| 統計（seed のばらつき、信頼区間、検定、RL の IQM、実機の成功率） | ★ `ml-rigor`（`scripts/rl_stats.py`） |
+| 統計（seed のばらつき、信頼区間、検定、RL の IQM、実機の成功率、注釈者の一致） | ★ `ml-rigor`（`scripts/rl_stats.py`） |
 | 結果の分析・図 | ◆ ARIS `analyze-results`、Orchestra `20-ml-paper-writing/academic-plotting` |
 | 結果から言えることの判定 | ◆ ARIS `result-to-claim` |
 | 実験の整合性の監査（別モデル） | ◆ ARIS `experiment-audit` `integrity-forensics` |
@@ -55,6 +62,7 @@
 | 主張と引用の監査 | ◆ ARIS `paper-claim-audit` `citation-audit` `citation-crosscheck`、★ `ml-lit-review`（`verify_bib.py`） |
 | 数式・証明 | ◆ ARIS `formula-derivation` `proof-checker` |
 | 発表 | ◆ ARIS `paper-slides` `paper-poster-html`、Orchestra `20-ml-paper-writing/presenting-conference-talks` |
+| 実験の記録をブログ・Zenn の記事にする（下書きまで。公開は人） | `research-lab/references/blog.md`（`rl blog new / check`） |
 | rebuttal・再投稿 | ◆ ARIS `rebuttal` `resubmit-pipeline` ＋ ★ `venue-review` |
 
 ## 全体を一気に回すもの（使うときの注意）

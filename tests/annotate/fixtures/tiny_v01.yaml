@@ -1,0 +1,39 @@
+# テスト用の小さな v0.1（ir-trial の書式）
+robot: toyarm
+source: {url: https://example.org/toyarm, fetched: 2026-11-09, commit_or_version: abc, license: MIT, format: numbered_markdown_photos, numbered_steps: 4}
+bom:
+  - {id: B01, name: servo, qty: 2, kind: electronics}
+  - {id: P01, name: base, qty: 1, kind: printed, cad: "Base_01.step"}
+  - {id: P02, name: holder, qty: 1, kind: printed}
+  - {id: A01, name: horn, qty: 2, kind: included_with, parent: B01}
+subassemblies:
+  - {id: SA1, name: joint 1, parent: SA2}
+  - {id: SA2, name: arm, parent: null}
+steps:
+  - id: S01
+    text: "Place the motor into the base."
+    subassembly: SA1
+    atomic:
+      - {id: S01a, type: INS, parts_in: [B01, P01], fasteners: null, tool: {stated: null, inferred: null, tool_source: rule}, two_hands: "no", flexible: "yes", min_part_mm: ~, force: low, precedes_from_text: [], feasibility_rule: H, fix_state: placed}
+  - id: S02
+    text: "Fasten the motor with 4 screws. Two from the bottom and two from top."
+    subassembly: SA1
+    atomic:
+      - {id: S02a, type: SCR, parts_in: [B01, P01], fasteners: {size: "M2x6", size_source: so101, count: 4}, tool: {stated: null, inferred: "Phillips #0", tool_source: rule}, two_hands: unknown, flexible: "no", min_part_mm: 6, force: low, flips: 1, precedes_from_text: [S01], feasibility_rule: R+T, fix_state: fixed}
+  - id: S03
+    text: "Slide the holder over and route the wire (see photo)."
+    subassembly: SA1
+    atomic:
+      - {id: S03a, type: CBL, parts_in: [A01], fasteners: null, tool: {stated: null, inferred: null, tool_source: rule}, two_hands: "yes", flexible: "yes", force: low, precedes_from_text: [S02], feasibility_rule: H, count: 2}
+      - {id: S03b, type: INS, parts_in: [P02, B01], fasteners: null, tool: {stated: null, inferred: null, tool_source: rule}, two_hands: "no", flexible: "no", force: low, precedes_from_text: [S03a], feasibility_rule: R}
+  - id: S04
+    text: "Attach the horn. Try not to move the motor position."
+    subassembly: SA1
+    atomic:
+      - {id: S04a, type: HRN, parts_in: [A01, B01], fasteners: {size: "unknown", count: "unknown"}, tool: {stated: null, inferred: "hex key or Phillips", tool_source: rule}, two_hands: "yes", flexible: "no", force: low, precedes_from_text: [S03], feasibility_rule: R+T, notes: "S02a の写し"}
+precedence_dag:
+  - {from: S01, to: S02, source: geometry}
+  - {from: S02, to: S03, source: text_anaphora, notes: "'the motor'。逆順も可"}
+  - {from: S03, to: S04, source: geometry}
+  - {from: S01, to: S04, source: order_only}
+summary_counts: {L1: 5}

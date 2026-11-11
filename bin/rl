@@ -8,6 +8,11 @@
   rl new <name> [--domain ml|cv|nlp|robotics|systems] [--path DIR]   研究プロジェクトを作る
   rl status [name|path]                                               台帳の要約
   rl check [name|path]                                                台帳の書式の確認
+  rl readme [name|path] [--check]                                     README の「検証状況」を台帳から書き直す
+  rl program new <name> / list / status [name] / link <program> <paper_id> <project> / readme [name]
+                                                                      研究プログラム（系統・論文の並び）とプロジェクトの紐づけ
+  rl sim list / setup <tool..> / check / launch <tool> [--model M]   シミュレーターと道具（sims/catalog.yaml）をプロジェクトに入れる・確かめる・起動する
+  rl sim setup/check --worker / run [--worker] [--tool T] -- <cmd> / colab [tool..]   dev-worker に同じ版を入れる・そこで実行する・Colab のノートブックを書く
   rl doctor [--clouds]                                                ツール・接続の確認
   rl link                                                             スキルを ~/.claude/skills に登録
   rl sync                                                             上流スキルの更新と索引の再生成
@@ -32,7 +37,9 @@ from pathlib import Path
 from ruamel.yaml import YAML
 
 RL = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(RL / "lib"))   # rlkit（追加のコマンドと共有する部品）
 PROJECTS = RL / "projects"
+PROGRAMS = RL / "programs"
 ARIS = RL / "vendor" / "aris"
 CLAUDE_SKILLS = Path.home() / ".claude" / "skills"
 LOCAL_BIN = Path.home() / ".local" / "bin"
@@ -54,6 +61,7 @@ DOMAINS = ["ml", "cv", "nlp", "robotics", "systems"]
 yaml = YAML()
 yaml.preserve_quotes = True
 yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)   # テンプレートと同じ「  - 」の書式で書き出す
 
 
 def now() -> str:
@@ -161,27 +169,31 @@ def cmd_new(a):
     for d in ("runs", "src", "configs", "paper", "notes", ".gpu"):
         (target / d).mkdir(exist_ok=True)
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=target, check=True)
+    _, readme, _ = readme_state(target)
+    (target / "README.md").write_text(readme)
     print(f"作成しました: {target}")
+    if getattr(a, "program", None):
+        if not a.paper:
+            print("  ⚠ --program には --paper も要ります。紐づけは `rl program link` で")
+        elif a.path:
+            print("  ⚠ --path で projects/ の外に作ったので、プログラムへの紐づけはしていません")
+        else:
+            link_paper(resolve_program(a.program), a.paper, a.name)
+            _, readme, _ = readme_state(target)
+            (target / "README.md").write_text(readme)
     print(f"  ARIS スキル {len(ARIS_CORE) - len(missing)} 個をプロジェクトに登録" + (f"（見つからない: {missing}）" if missing else ""))
     print("  次: cd して Claude Code を開き「research-lab で S1 から始めて」と頼む")
 
 
 # ---------------------------------------------------------------- status
 def count_runs(proj: Path):
+    from rlkit.runs import test_runs   # test の数え方は rl run と同じ（失敗・中断した test 実行も数える）
     runs = sorted((proj / "runs").glob("run_*"))
     by = {}
-    test_evals = 0
     for r in runs:
         st = (r / "status").read_text().strip() if (r / "status").exists() else "?"
         by[st] = by.get(st, 0) + 1
-        m = r / "metrics.json"
-        if m.exists():
-            try:
-                if json.loads(m.read_text()).get("split") == "test":
-                    test_evals += 1
-            except json.JSONDecodeError:
-                pass
-    return runs, by, test_evals
+    return runs, by, len(test_runs(proj))
 
 
 def active_clusters(proj: Path):
@@ -196,6 +208,9 @@ def cmd_status(a):
     print(f"# {led.get('project')}  ({led.get('domain')})  stage={led.get('stage')}")
     if led.get("question"):
         print(f"問い: {led['question']}")
+    pgm = led.get("program") or {}
+    if pgm.get("name"):
+        print(f"プログラム: {pgm.get('name')} / {pgm.get('paper_id')}" + (f"（依存: {', '.join(pgm.get('depends_on') or [])}）" if pgm.get("depends_on") else ""))
     gates = led.get("gates") or {}
     print("ゲート: " + "  ".join(
         f"{g}:{'✓' if v.get('approved') else ('待ち' if v.get('pending') else '-')}" for g, v in gates.items()))
@@ -246,6 +261,7 @@ def ledger_errors(proj: Path) -> list[str]:
         for d in t.get("depends_on") or []:
             if d not in ids:
                 errs.append(f"{t.get('id')}: depends_on の {d} がありません")
+    errs += project_program_errors(proj, led)
     cf = proj / "claims.yaml"
     if cf.exists():
         try:
@@ -264,10 +280,934 @@ def ledger_errors(proj: Path) -> list[str]:
 def cmd_check(a):
     proj = resolve_project(a.project)
     errs = ledger_errors(proj)
+    pr = RL / "bin" / "rl-prereg"
+    if pr.exists() and subprocess.run([str(pr), "check", str(proj), "--quiet"]).returncode != 0:
+        errs.append("事前登録が凍結時から変わっています（上の rl prereg check の表示）")
     for e in errs:
         print(f"✗ {e}")
     print("✓ 台帳は正しく読めます" if not errs else f"{len(errs)} 件の問題")
+    if not errs:
+        _, _, state = readme_state(proj)
+        if state != "ok":
+            print("⚠ README の検証状況が台帳と合っていません（`rl readme` で直す）")
     sys.exit(1 if errs else 0)
+
+
+# ---------------------------------------------------------------- readme
+AUTO_START, AUTO_END = "<!-- rl:auto:start -->", "<!-- rl:auto:end -->"
+STAGE_NAMES = {"S-1": "興味・テーマ", "S0": "準備", "S1": "アイデア・文献", "S2": "計画", "S3": "実験",
+               "S4": "分析・主張", "S5": "執筆", "S6": "自己査読", "S7": "査読対応"}
+STRENGTH = {"strong": "言い切る", "qualified": "限定つき", "exploratory": "探索的"}
+CLAIM_STATUS = {"candidate": "候補", "frozen": "確定（G3）", "retracted": "取り下げ"}
+
+
+def _cell(x) -> str:
+    return str(x if x is not None else "").replace("|", "\\|").replace("\n", " ").strip()
+
+
+def render_auto(proj: Path) -> str:
+    """README の「検証状況」の枠の中身。台帳にあることだけを書く（数字は claims.yaml と runs/ から）。"""
+    led = load(proj / "research.yaml")
+    out = [f"_台帳（research.yaml・claims.yaml・runs/）から `rl readme` が生成。最終更新 {dt.date.today().isoformat()}_", ""]
+    st = str(led.get("stage"))
+    out.append(f"- **段階**：{st} {STAGE_NAMES.get(st, '')}")
+    gl = []
+    for g, v in (led.get("gates") or {}).items():
+        mark = "✓" if v.get("approved") else ("判断待ち" if v.get("pending") else "-")
+        when = f"（{v.get('decided_at')}）" if v.get("approved") and v.get("decided_at") else ""
+        gl.append(f"{g} {mark}{when}")
+    out.append("- **確認ポイント**：" + " / ".join(gl))
+    if led.get("venue_target"):
+        out.append(f"- **投稿先の目安**：{_cell(led['venue_target'])}")
+    pgm = led.get("program") or {}
+    if pgm.get("name"):
+        out.append(f"- **プログラム**：{_cell(pgm.get('name'))} の {_cell(pgm.get('paper_id'))}" + (f"（依存：{', '.join(pgm.get('depends_on') or [])}）" if pgm.get("depends_on") else ""))
+    out += ["", "**研究の問い**", "", f"> {_cell(led.get('question')) or '（未確定。G1 で決める）'}", "", "**仮説**", ""]
+    hyps = led.get("hypotheses") or []
+    out += [f"- {_cell(h)}" for h in hyps] or ["（まだない。S2 で反証できる形に書き、G2 で確定する）"]
+    out += ["", "**主張と証拠**", ""]
+    cl = []
+    if (proj / "claims.yaml").exists():
+        cl = (load(proj / "claims.yaml") or {}).get("claims") or []
+    live = [c for c in cl if c.get("status") != "retracted"]
+    if live:
+        out += ["| ID | 主張 | 強さ | 証拠の種類 | 状態 | 証拠（run） |", "|---|---|---|---|---|---|"]
+        for c in live:
+            ev = c.get("evidence") or []
+            out.append(f"| {_cell(c.get('id'))} | {_cell(c.get('text'))} | {STRENGTH.get(c.get('strength'), _cell(c.get('strength')))} "
+                       f"| {_cell(c.get('eval_type'))} | {CLAIM_STATUS.get(c.get('status'), _cell(c.get('status')))} | {len(ev)} 件 |")
+    else:
+        out.append("（まだない。主張は claims.yaml に証拠の run_id とともに置く）")
+    if len(cl) > len(live):
+        out.append(f"\n取り下げた主張：{len(cl) - len(live)} 件（claims.yaml に記録）")
+    runs, by, test_evals = count_runs(proj)
+    mx = (led.get("protocol") or {}).get("max_test_evals")
+    out += ["", f"- **実行**：{len(runs)} 件" + (f"（{', '.join(f'{k} {v}' for k, v in by.items())}）" if by else "")
+            + f"。テストセットでの評価 {test_evals} 回" + (f" / 上限 {mx} 回" if mx else "")]
+    tasks = [t for t in (led.get("tasks") or []) if t.get("status") != "done"]
+    if tasks:
+        out += ["", "**次にやること**", ""]
+        for t in tasks[:6]:
+            title = _cell(t.get("title"))
+            out.append(f"- {t.get('id')}：{title[:110] + '…' if len(title) > 110 else title}")
+        if len(tasks) > 6:
+            out.append(f"- ほか {len(tasks) - 6} 件（`rl status`）")
+    bl = led.get("blockers") or []
+    if bl:
+        out += ["", "**止まっている理由**", ""] + [f"- {_cell(b.get('reason'))}（要るもの：{b.get('needs')}）" for b in bl]
+    return "\n".join(out)
+
+
+def _strip_date(block: str) -> str:
+    return "\n".join(l for l in block.splitlines() if "最終更新" not in l)
+
+
+def readme_state(proj: Path):
+    """(README の本文, 新しい本文, 状態) 状態は ok | stale | no-markers | missing。"""
+    f = proj / "README.md"
+    new_block = render_auto(proj)
+    if not f.exists():
+        return "", f"# {proj.name}\n\n## 検証状況\n{AUTO_START}\n{new_block}\n{AUTO_END}\n", "missing"
+    s = f.read_text()
+    if AUTO_START not in s or AUTO_END not in s:
+        return s, s.rstrip("\n") + f"\n\n## 検証状況\n{AUTO_START}\n{new_block}\n{AUTO_END}\n", "no-markers"
+    head, rest = s.split(AUTO_START, 1)
+    old_block, tail = rest.split(AUTO_END, 1)
+    if _strip_date(old_block.strip("\n")) == _strip_date(new_block):
+        return s, s, "ok"
+    return s, f"{head}{AUTO_START}\n{new_block}\n{AUTO_END}{tail}", "stale"
+
+
+def cmd_readme(a):
+    proj = resolve_project(a.project)
+    old, new, state = readme_state(proj)
+    msg = {"ok": "README の検証状況は台帳と一致しています", "stale": "README の検証状況が台帳と食い違っています",
+           "no-markers": "README に自動の枠（rl:auto）がありません", "missing": "README.md がありません"}[state]
+    if a.check:
+        print(("✓ " if state == "ok" else "✗ ") + msg)
+        sys.exit(0 if state == "ok" else 1)
+    if state == "ok":
+        print("✓ " + msg)
+        return
+    (proj / "README.md").write_text(new)
+    print(f"{msg} → 書き直しました: {proj / 'README.md'}")
+    if state in ("missing", "no-markers"):
+        print("  手で書く欄（一言・目的と狙い・先行研究との差分・方法の骨格）は templates/project/README.md を参考に足す")
+
+
+# ---------------------------------------------------------------- program
+PAPER_STATUS = ("planned", "active", "done", "dropped")
+LINE_STATUS = ("active", "later", "paused", "dropped")
+
+
+def resolve_program(ref: str | None) -> Path:
+    """名前かパスからプログラムのフォルダを返す。省略時は、いまいるプロジェクトの紐づけから探す。"""
+    if ref is None:
+        p = Path.cwd()
+        while p != p.parent:
+            if (p / "program.yaml").exists():
+                return p
+            if (p / "research.yaml").exists():
+                name = ((load(p / "research.yaml").get("program") or {}).get("name"))
+                if name and (PROGRAMS / name / "program.yaml").exists():
+                    return PROGRAMS / name
+                break
+            p = p.parent
+        die("プログラムの名前を指定してください（rl program list で一覧）")
+    cand = Path(ref).expanduser()
+    if (cand / "program.yaml").exists():
+        return cand.resolve()
+    if (PROGRAMS / ref / "program.yaml").exists():
+        return PROGRAMS / ref
+    die(f"プログラムが見つかりません: {ref}")
+
+
+def project_dir(name: str | None):
+    if not name:
+        return None
+    p = PROJECTS / str(name)
+    return p if (p / "research.yaml").exists() else None
+
+
+def find_paper(prog_data, paper_id):
+    for pp in prog_data.get("papers") or []:
+        if str(pp.get("id")) == str(paper_id):
+            return pp
+    return None
+
+
+def paper_state(pp, prog_data):
+    """論文 1 本の状態（紐づいたプロジェクトの台帳から）。"""
+    proj = project_dir(pp.get("project"))
+    st = {"stage": "-", "gates": "-", "open": "-", "blockers": 0, "linked": bool(proj)}
+    if proj:
+        led = load(proj / "research.yaml")
+        st["stage"] = str(led.get("stage"))
+        gates = led.get("gates") or {}
+        st["gates"] = " ".join(f"{g}{'✓' if v.get('approved') else ('…' if v.get('pending') else '-')}" for g, v in gates.items())
+        st["open"] = len([t for t in (led.get("tasks") or []) if t.get("status") != "done"])
+        st["blockers"] = len(led.get("blockers") or [])
+    deps = pp.get("depends_on") or []
+    waiting = []
+    for d in deps:
+        dp = find_paper(prog_data, d)
+        if dp is None or dp.get("status") != "done":
+            waiting.append(str(d))
+    st["waiting_on"] = waiting
+    return st
+
+
+def program_errors(prog: Path) -> list[str]:
+    errs = []
+    try:
+        data = load(prog / "program.yaml")
+    except Exception as e:  # noqa: BLE001
+        return [f"program.yaml が読めません: {e}"]
+    line_ids = [str(l.get("id")) for l in (data.get("lines") or [])]
+    if len(line_ids) != len(set(line_ids)):
+        errs.append("lines の id が重複しています")
+    for l in data.get("lines") or []:
+        if l.get("status") not in LINE_STATUS:
+            errs.append(f"系統 {l.get('id')}: status が不正 {l.get('status')}（{'/'.join(LINE_STATUS)}）")
+    ids = [str(pp.get("id")) for pp in (data.get("papers") or [])]
+    if len(ids) != len(set(ids)):
+        errs.append("papers の id が重複しています")
+    for pp in data.get("papers") or []:
+        pid = pp.get("id")
+        if str(pp.get("line")) not in line_ids:
+            errs.append(f"{pid}: line {pp.get('line')} が lines にありません")
+        if pp.get("status") not in PAPER_STATUS:
+            errs.append(f"{pid}: status が不正 {pp.get('status')}（{'/'.join(PAPER_STATUS)}）")
+        for d in pp.get("depends_on") or []:
+            if str(d) not in ids:
+                errs.append(f"{pid}: depends_on の {d} が papers にありません")
+        if pp.get("project"):
+            proj = project_dir(pp.get("project"))
+            if not proj:
+                errs.append(f"{pid}: project {pp.get('project')} が projects/ にありません")
+            else:
+                pg = load(proj / "research.yaml").get("program") or {}
+                if pg.get("name") != data.get("program") or str(pg.get("paper_id")) != str(pid):
+                    errs.append(f"{pid}: {pp.get('project')} の research.yaml の program 欄が合っていません（rl program link で直す）")
+    return errs
+
+
+def project_program_errors(proj: Path, led) -> list[str]:
+    """プロジェクト側から見た紐づけの確認（rl check で使う）。"""
+    pg = led.get("program") or {}
+    if not pg:
+        return []
+    if pg.get("file") and not pg.get("name"):
+        return ["program.file は古い書き方です。`rl program link <program> <paper_id> <project>` で紐づけ直す"]
+    name, pid = pg.get("name"), pg.get("paper_id")
+    if not name:
+        return []
+    prog = PROGRAMS / str(name)
+    if not (prog / "program.yaml").exists():
+        return [f"program {name} が programs/ にありません"]
+    pp = find_paper(load(prog / "program.yaml"), pid)
+    if pp is None:
+        return [f"program {name} に論文 {pid} がありません"]
+    if str(pp.get("project")) != proj.name:
+        return [f"program {name} の {pid} は project {pp.get('project')} を指しています（このプロジェクトは {proj.name}）"]
+    return []
+
+
+def link_paper(prog: Path, paper_id: str, project: str) -> None:
+    data = load(prog / "program.yaml")
+    pp = find_paper(data, paper_id)
+    if pp is None:
+        die(f"{prog.name} に論文 {paper_id} がありません（program.yaml の papers に足してから）")
+    proj = project_dir(project)
+    if not proj:
+        die(f"プロジェクトが見つかりません: {project}")
+    # 別の論文が同じプロジェクトを指していたら外す（1 論文 = 1 プロジェクト）
+    for other in data.get("papers") or []:
+        if other is not pp and other.get("project") == project:
+            die(f"{project} はすでに {other.get('id')} に紐づいています")
+    pp["project"] = project
+    if pp.get("status") == "planned":
+        pp["status"] = "active"
+    dump(data, prog / "program.yaml")
+    led = load(proj / "research.yaml")
+    deps = [find_paper(data, d) for d in (pp.get("depends_on") or [])]
+    led["program"] = {"name": data.get("program"), "paper_id": str(paper_id),
+                      "depends_on": [d.get("project") for d in deps if d and d.get("project")]}
+    add_log(led, "rl", f"rl program link で {data.get('program')} の {paper_id} に紐づけ")
+    dump(led, proj / "research.yaml")
+    print(f"紐づけました: {data.get('program')} / {paper_id} ↔ {project}")
+
+
+def render_program_auto(prog: Path) -> str:
+    data = load(prog / "program.yaml")
+    out = [f"_program.yaml と各プロジェクトの台帳から `rl program readme` が生成。最終更新 {dt.date.today().isoformat()}_", ""]
+    for l in data.get("lines") or []:
+        out.append(f"**系統 {l.get('id')}：{_cell(l.get('name'))}**（{l.get('status')}）")
+        if l.get("trunk"):
+            out.append(f"> {_cell(l.get('trunk'))}")
+        out.append("")
+        papers = [pp for pp in (data.get("papers") or []) if str(pp.get("line")) == str(l.get("id"))]
+        if not papers:
+            out += ["（論文はまだない）", ""]
+            continue
+        out += ["| ID | 問い | 状態 | プロジェクト | 段階 | 確認ポイント | 未完了 | 依存 |", "|---|---|---|---|---|---|---|---|"]
+        for pp in papers:
+            st = paper_state(pp, data)
+            dep = ", ".join(str(d) for d in (pp.get("depends_on") or [])) or "—"
+            if st["waiting_on"]:
+                dep += "（待ち：" + ", ".join(st["waiting_on"]) + "）"
+            out.append(f"| {_cell(pp.get('id'))} | {_cell(pp.get('question'))} | {pp.get('status')} | {_cell(pp.get('project')) or '—'} "
+                       f"| {st['stage']} | {st['gates']} | {st['open']} | {dep} |")
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def cmd_program(a):
+    if a.pcmd == "new":
+        target = PROGRAMS / a.name
+        if target.exists():
+            die(f"すでにあります: {target}")
+        shutil.copytree(RL / "templates" / "program", target)
+        for f in target.rglob("*"):
+            if f.is_file():
+                f.write_text(f.read_text().replace("{{PROGRAM}}", a.name).replace("{{DATE}}", dt.date.today().isoformat()))
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=target, check=True)
+        print(f"作成しました: {target}（program.md に全体像、program.yaml に系統と論文の対応を書く）")
+    elif a.pcmd == "list":
+        progs = sorted(d for d in PROGRAMS.glob("*") if (d / "program.yaml").exists()) if PROGRAMS.exists() else []
+        if not progs:
+            print("プログラムはまだありません（rl program new <name>）")
+        for d in progs:
+            data = load(d / "program.yaml")
+            papers = data.get("papers") or []
+            linked = len([pp for pp in papers if pp.get("project")])
+            print(f"{d.name:<24} {_cell(data.get('title'))}  系統 {len(data.get('lines') or [])}・論文 {len(papers)}（プロジェクトあり {linked}）")
+    elif a.pcmd == "status":
+        prog = resolve_program(a.name)
+        data = load(prog / "program.yaml")
+        print(f"# {data.get('program')}  {_cell(data.get('title'))}")
+        for l in data.get("lines") or []:
+            print(f"\n系統 {l.get('id')} {l.get('name')}  [{l.get('status')}]")
+            if l.get("trunk"):
+                print(f"  幹: {l.get('trunk')}")
+            for pp in [pp for pp in (data.get("papers") or []) if str(pp.get("line")) == str(l.get("id"))]:
+                st = paper_state(pp, data)
+                proj = pp.get("project") or "（プロジェクト未作成）"
+                extra = f"  stage={st['stage']}  {st['gates']}  未完了 {st['open']}" if st["linked"] else ""
+                warn = f"  ⚠ blocker {st['blockers']}" if st["blockers"] else ""
+                wait = f"  依存の待ち: {', '.join(st['waiting_on'])}" if st["waiting_on"] else ""
+                print(f"  - {pp.get('id'):<4} [{pp.get('status')}] {proj}{extra}{warn}{wait}")
+                if pp.get("question"):
+                    print(f"         {pp.get('question')}")
+        errs = program_errors(prog)
+        for e in errs:
+            print(f"✗ {e}")
+    elif a.pcmd == "link":
+        link_paper(resolve_program(a.program), a.paper_id, a.project)
+    elif a.pcmd == "readme":
+        prog = resolve_program(a.name)
+        f = prog / "program.md"
+        block = render_program_auto(prog)
+        s = f.read_text() if f.exists() else f"# プログラム：{prog.name}\n"
+        if AUTO_START in s and AUTO_END in s:
+            head, rest = s.split(AUTO_START, 1)
+            _, tail = rest.split(AUTO_END, 1)
+            s = f"{head}{AUTO_START}\n{block}{AUTO_END}{tail}"
+        else:
+            s = s.rstrip("\n") + f"\n\n## 論文とプロジェクトの状況\n{AUTO_START}\n{block}{AUTO_END}\n"
+        f.write_text(s)
+        print(f"書き直しました: {f}")
+    elif a.pcmd == "check":
+        prog = resolve_program(a.name)
+        errs = program_errors(prog)
+        for e in errs:
+            print(f"✗ {e}")
+        print("✓ プログラムの台帳は正しく読めます" if not errs else f"{len(errs)} 件の問題")
+        sys.exit(1 if errs else 0)
+
+
+# ---------------------------------------------------------------- sim
+import base64  # noqa: E402  （sim の節だけで使う）
+import shlex  # noqa: E402
+
+SIM_CACHE = RL / ".cache" / "sims"
+WORKER_HOST = "dev-worker"   # offload の Worker（~/.offload/config の REMOTE_HOST）。NVIDIA の GPU は無い
+
+SMOKE = {
+    "mujoco": """
+import mujoco
+m = mujoco.MjModel.from_xml_string('<mujoco><worldbody><geom type="plane" size="1 1 .1"/><body pos="0 0 .5"><freejoint/><geom type="box" size=".05 .05 .05" mass="1"/></body></worldbody></mujoco>')
+d = mujoco.MjData(m)
+for _ in range(500):
+    mujoco.mj_step(m, d)
+z = float(d.qpos[2])
+assert 0.03 < z < 0.07, z   # 箱が床に落ちて止まる
+print("mujoco", mujoco.__version__, "箱の高さ", round(z, 4))
+""",
+    "geom": """
+import trimesh, fcl, numpy as np
+a = trimesh.creation.box((1, 1, 1)); b = trimesh.creation.box((1, 1, 1))
+def obj(m, t):
+    bvh = fcl.BVHModel(); bvh.beginModel(len(m.vertices), len(m.faces)); bvh.addSubModel(m.vertices, m.faces); bvh.endModel()
+    return fcl.CollisionObject(bvh, fcl.Transform(np.eye(3), np.array(t, float)))
+hit = fcl.collide(obj(a, [0, 0, 0]), obj(b, [0.5, 0, 0]), fcl.CollisionRequest(), fcl.CollisionResult())
+miss = fcl.collide(obj(a, [0, 0, 0]), obj(b, [1.5, 0, 0]), fcl.CollisionRequest(), fcl.CollisionResult())
+assert hit and not miss, (hit, miss)
+print("trimesh", trimesh.__version__, "fcl の干渉の判定 OK")
+""",
+    "cad": """
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+from OCP.BRepMesh import BRepMesh_IncrementalMesh
+box = BRepPrimAPI_MakeBox(10.0, 20.0, 30.0).Shape()
+BRepMesh_IncrementalMesh(box, 0.5)
+print("OCP の箱を作って面に分割 OK")
+""",
+    "drake": """
+import importlib.metadata as md
+from pydrake.all import (AddMultibodyPlantSceneGraph, Box, CoulombFriction, DiagramBuilder, HalfSpace,
+                         RigidTransform, Simulator, SpatialInertia)
+b = DiagramBuilder()
+plant, _ = AddMultibodyPlantSceneGraph(b, time_step=1e-3)
+body = plant.AddRigidBody("box", SpatialInertia.SolidBoxWithMass(1.0, 0.1, 0.1, 0.1))
+mu = CoulombFriction(0.9, 0.8)
+plant.RegisterCollisionGeometry(body, RigidTransform(), Box(0.1, 0.1, 0.1), "box", mu)
+plant.RegisterCollisionGeometry(plant.world_body(), RigidTransform(), HalfSpace(), "ground", mu)
+plant.Finalize()
+sim = Simulator(b.Build())
+ctx = plant.GetMyMutableContextFromRoot(sim.get_mutable_context())
+plant.SetFreeBodyPose(ctx, body, RigidTransform([0, 0, 0.5]))
+sim.AdvanceTo(1.0)
+z = float(plant.EvalBodyPoseInWorld(ctx, body).translation()[2])
+assert 0.03 < z < 0.07, z   # 箱が床に落ちて止まる（MultibodyPlant）
+print("drake", md.version("drake"), "箱の高さ", round(z, 4))
+""",
+    "lerobot": """
+import lerobot, torch
+from lerobot.policies.act.configuration_act import ACTConfig
+dev = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+print("lerobot", lerobot.__version__, "torch", torch.__version__, "ACT の設定 OK", "デバイス", dev)
+""",
+}
+
+
+def load_catalog():
+    f = RL / "sims" / "catalog.yaml"
+    if not f.exists():
+        die("sims/catalog.yaml がありません")
+    with f.open() as fh:
+        return (YAML(typ="safe").load(fh) or {}).get("tools") or {}
+
+
+def this_platform():
+    """手元で動くプラットフォーム（any / cuda / rtx）の集合。"""
+    ok = {"any"}
+    if which("nvidia-smi"):
+        ok.add("cuda")
+        r = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True)
+        if "RTX" in r.stdout or "L40" in r.stdout:
+            ok.add("rtx")
+    return ok
+
+
+def sim_lock_path(proj: Path) -> Path:
+    return proj / "sims.lock.yaml"
+
+
+def load_sim_lock_all(proj: Path) -> dict:
+    f = sim_lock_path(proj)
+    return (load(f) or {}) if f.exists() else {}
+
+
+def load_sim_lock(proj: Path) -> dict:
+    return load_sim_lock_all(proj).get("tools") or {}
+
+
+def save_sim_lock(proj: Path, tools: dict, worker: dict | None = None) -> None:
+    f = sim_lock_path(proj)
+    data = {"note": "rl sim setup が書く。入れた道具の正確な版（commit）を残し、同じ環境を立て直せるようにする",
+            "tools": tools}
+    worker = worker if worker is not None else load_sim_lock_all(proj).get("worker")
+    if worker:
+        data["worker"] = worker
+    dump(data, f)
+
+
+def py_version_of(py: Path) -> str:
+    r = subprocess.run([str(py), "-c", "import platform; print(platform.python_version())"], capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+def tool_venv(proj: Path, name: str, t: dict) -> Path:
+    """道具を入れる venv。catalog の python（例 "3.12"）がプロジェクトの .venv と違えば、その道具だけ別の venv（.cache/venvs/<名前>）。"""
+    main = proj / ".venv"
+    want = str(t.get("python") or "")
+    if not want:
+        return main
+    if not (main / "bin" / "python").exists():
+        return main
+    have = py_version_of(main / "bin" / "python")
+    return main if (have == want or have.startswith(want + ".")) else proj / ".cache" / "venvs" / name
+
+
+def ensure_venv(venv: Path, python: str = "3.11") -> Path:
+    py = venv / "bin" / "python"
+    if not py.exists():
+        venv.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["uv", "venv", str(venv), "--python", python], check=True)
+    return py
+
+
+def proj_python(proj: Path) -> Path:
+    return ensure_venv(proj / ".venv", "3.11")
+
+
+def lock_venv(proj: Path, entry: dict) -> Path:
+    return proj / (entry.get("venv") or ".venv")
+
+
+def pkg_names(specs) -> list:
+    names = []
+    for sp in specs:
+        n = sp
+        for sep in ("[", ">", "<", "=", "!", "~", " "):
+            n = n.split(sep)[0]
+        names.append(n)
+    return names
+
+
+VERSIONS_CODE = "import importlib.metadata as m, json\nout={}\nfor n in %r:\n    try: out[n]=m.version(n)\n    except Exception: out[n]=None\nprint(json.dumps(out))"
+
+
+def py_versions(py: Path, specs) -> dict:
+    names = pkg_names(specs)
+    r = subprocess.run([str(py), "-c", VERSIONS_CODE % names], capture_output=True, text=True)
+    try:
+        return json.loads(r.stdout.strip().splitlines()[-1])
+    except (json.JSONDecodeError, IndexError):
+        return {n: None for n in names}
+
+
+def git_fetch_pinned(repo: str, ref: str, dest: Path) -> str:
+    if (dest / ".git").exists():
+        r = subprocess.run(["git", "-C", str(dest), "rev-parse", "HEAD"], capture_output=True, text=True)
+        return r.stdout.strip()
+    dest.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    subprocess.run(["git", "remote", "add", "origin", repo], cwd=dest, check=True)
+    subprocess.run(["git", "fetch", "-q", "--depth", "1", "origin", ref], cwd=dest, check=True)
+    subprocess.run(["git", "checkout", "-q", "FETCH_HEAD"], cwd=dest, check=True)
+    r = subprocess.run(["git", "-C", str(dest), "rev-parse", "HEAD"], capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+def sim_setup_one(proj: Path, name: str, t: dict, lock: dict) -> None:
+    kind = t.get("kind")
+    plat = this_platform()
+    if t.get("platform", "any") not in plat and kind != "remote":
+        print(f"✗ {name}: この計算機では動きません（{t.get('platform')} が要る）")
+        return
+    if kind == "py":
+        specs = t["spec"] if isinstance(t["spec"], list) else [t["spec"]]
+        if not (proj / ".venv" / "bin" / "python").exists():
+            proj_python(proj)
+        venv = tool_venv(proj, name, t)
+        py = ensure_venv(venv, str(t.get("python") or "3.11"))
+        subprocess.run(["uv", "pip", "install", "--python", str(py), *specs], check=True)
+        e = {"kind": "py", "packages": py_versions(py, specs), "python": py_version_of(py), "installed": now()}
+        if venv != proj / ".venv":
+            e["venv"] = str(venv.relative_to(proj))
+        lock[name] = e
+        print(f"✓ {name}: " + ", ".join(f"{k} {v}" for k, v in e["packages"].items()) + (f"（別の venv {e['venv']}、Python {e['python']}）" if e.get("venv") else ""))
+    elif kind == "git":
+        dest = SIM_CACHE / name / t["ref"]
+        sha = git_fetch_pinned(t["repo"], t["ref"], dest)
+        lock[name] = {"kind": "git", "repo": t["repo"], "commit": sha, "path": str(dest), "installed": now()}
+        print(f"✓ {name}: {sha[:12]} を {dest} に取り込み")
+        if t.get("build"):
+            print(f"  ビルドの注意: {t['build']}")
+    elif kind == "cli":
+        exe = t.get("check", "").split()[0] if t.get("check") else None
+        if not (exe and which(exe)):
+            subprocess.run(t["install"], shell=True, check=True)
+        r = subprocess.run(t["check"], shell=True, capture_output=True, text=True)
+        ver = (r.stdout or r.stderr).strip().splitlines()[-1] if (r.stdout or r.stderr).strip() else "?"
+        lock[name] = {"kind": "cli", "version": ver, "installed": now()}
+        print(f"✓ {name}: {ver}")
+    elif kind == "remote":
+        src = RL / t["template"]
+        dst = proj / "configs" / "sky" / src.name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if not dst.exists():
+            shutil.copy(src, dst)
+        lock[name] = {"kind": "remote", "template": str(dst.relative_to(proj)), "gpu": t.get("gpu"), "installed": now()}
+        for k in ("repo", "ref", "spec"):
+            if t.get(k):
+                lock[name][k] = t[k]
+        print(f"✓ {name}: 手元では動かないので、借りた GPU で立てる設定を {dst.relative_to(proj)} に置きました")
+        print(f"  使うとき（G2 の承認のあと）: rl gpu up {proj.name} {dst.relative_to(proj)} --hours H --usd-per-hour X")
+        if t.get("license"):
+            print(f"  ライセンス: {t['license']}")
+    else:
+        die(f"{name}: kind が不明 {kind}")
+
+
+def sim_check_one(proj: Path, name: str, t: dict, entry: dict) -> bool:
+    kind = entry.get("kind")
+    if kind == "py":
+        py = lock_venv(proj, entry) / "bin" / "python"
+        if not py.exists():
+            print(f"✗ {name}: {entry.get('venv') or '.venv'} がありません（rl sim setup {name}）"); return False
+        specs = t["spec"] if isinstance(t["spec"], list) else [t["spec"]]
+        now_v = py_versions(py, specs)
+        drift = {k: (v, now_v.get(k)) for k, v in (entry.get("packages") or {}).items() if now_v.get(k) != v}
+        if drift:
+            print(f"✗ {name}: 版が記録と違います {drift}"); return False
+        if t.get("smoke") in SMOKE:
+            r = subprocess.run([str(py), "-c", SMOKE[t["smoke"]]], capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f"✗ {name}: 動作の確認に失敗\n{(r.stderr or r.stdout)[-800:]}"); return False
+            print(f"✓ {name}: {r.stdout.strip().splitlines()[-1]}")
+        else:
+            print(f"✓ {name}: " + ", ".join(f"{k} {v}" for k, v in now_v.items()))
+        return True
+    if kind == "git":
+        path = Path(entry.get("path", ""))
+        if not (path / ".git").exists():
+            print(f"✗ {name}: {path} がありません（rl sim setup {name}）"); return False
+        r = subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD"], capture_output=True, text=True)
+        dirty = subprocess.run(["git", "-C", str(path), "status", "--porcelain"], capture_output=True, text=True).stdout.strip()
+        ok = r.stdout.strip() == entry.get("commit")
+        print(f"{'✓' if ok else '✗'} {name}: {r.stdout.strip()[:12]}" + ("" if ok else f"（記録は {entry.get('commit', '')[:12]}）") + ("  ⚠ 手を入れた差分あり" if dirty else ""))
+        return ok
+    if kind == "cli":
+        r = subprocess.run(t["check"], shell=True, capture_output=True, text=True)
+        good = r.returncode == 0
+        print(f"{'✓' if good else '✗'} {name}: {(r.stdout or r.stderr).strip()[:80]}")
+        return good
+    if kind == "remote":
+        good = (proj / entry.get("template", "")).exists()
+        print(f"{'✓' if good else '✗'} {name}: 借りた GPU で立てる設定 {entry.get('template')}" + ("" if which("sky") else "（SkyPilot が未導入: rl sim setup skypilot）"))
+        return good
+    print(f"✗ {name}: kind が不明"); return False
+
+
+# ---- dev-worker（offload の Worker。2 台目の Apple シリコンの Mac）
+def uv_version() -> str:
+    r = subprocess.run(["uv", "--version"], capture_output=True, text=True)
+    parts = r.stdout.split()
+    return parts[1] if len(parts) > 1 else ""
+
+
+def worker_script(body: str) -> str:
+    """Worker で走らせる bash。uv が無ければ手元と同じ版を ~/.local/share/rl/uv に入れる（brew は触らない）。"""
+    uv = uv_version()
+    return f"""set -euo pipefail
+UV="$(command -v uv || true)"
+if [ -z "$UV" ]; then
+  UV="$HOME/.local/share/rl/uv/bin/uv"
+  if [ ! -x "$UV" ]; then
+    echo "rl: Worker に uv が無いので $HOME/.local/share/rl/uv に uv=={uv} を入れます" >&2
+    python3 -m venv "$HOME/.local/share/rl/uv" && "$HOME/.local/share/rl/uv/bin/pip" install -q "uv=={uv}"
+  fi
+fi
+{body}
+"""
+
+
+def worker_exec(proj: Path, body: str, capture: bool = False) -> subprocess.CompletedProcess:
+    """offload run で、Worker のプロジェクトのミラー（~/offload/<名前>）の一番上で bash を走らせる。
+    スクリプトは base64 で渡す（offload の引数の読み替えと引用符の問題を避ける）。"""
+    if not which("offload"):
+        die("offload がありません（~/.offload/README.md）")
+    b64 = base64.b64encode(worker_script(body).encode()).decode()
+    cmd = ["offload", "run", "--", f"echo {b64} | base64 -d | bash"]
+    return subprocess.run(cmd, cwd=proj, capture_output=capture, text=True)
+
+
+def worker_json(r: subprocess.CompletedProcess) -> dict:
+    for line in reversed((r.stdout or "").splitlines()):
+        if line.startswith("RLJSON "):
+            return json.loads(line[len("RLJSON "):])
+    return {}
+
+
+def worker_setup(proj: Path, names: list, cat: dict, lock: dict) -> None:
+    allw = load_sim_lock_all(proj).get("worker") or {}
+    wtools = allw.get("tools") or {}
+    body, plan = [], []
+    for name in names:
+        t, e = cat.get(name, {}), lock.get(name)
+        if not e:
+            die(f"{name} は手元の sims.lock.yaml にありません。先に手元で rl sim setup {name}（Worker は手元と同じ版を入れる）")
+        if e["kind"] == "py":
+            venv = e.get("venv") or ".venv"
+            pyv = e.get("python") or py_version_of(lock_venv(proj, e) / "bin" / "python")
+            pins = [f"{k}=={v}" for k, v in (e.get("packages") or {}).items() if v]
+            q = " ".join(shlex.quote(p) for p in pins)
+            report = ("import importlib.metadata as m, json, platform\nout = {}\n"
+                      f"for n in {list((e.get('packages') or {}).keys())!r}:\n"
+                      "    try: out[n] = m.version(n)\n    except Exception: out[n] = None\n"
+                      f"print('RLJSON ' + json.dumps({{'tool': {name!r}, 'python': platform.python_version(), 'packages': out}}))\n")
+            b64 = base64.b64encode(report.encode()).decode()
+            body.append(f"""[ -x {venv}/bin/python ] || "$UV" venv -q --python {pyv} {venv}
+"$UV" pip install -q --python {venv}/bin/python {q}
+echo {b64} | base64 -d | {venv}/bin/python -
+""")
+            plan.append((name, "py", venv))
+        elif e["kind"] == "git":
+            rel = f".cache/sims/{name}/{e['commit']}"
+            body.append(f"""if [ ! -d {rel}/.git ]; then mkdir -p {rel} && git -C {rel} init -q && git -C {rel} remote add origin {shlex.quote(e['repo'])} && git -C {rel} fetch -q --depth 1 origin {e['commit']} && git -C {rel} checkout -q FETCH_HEAD; fi
+echo "RLJSON {{\\"tool\\": \\"{name}\\", \\"commit\\": \\"$(git -C {rel} rev-parse HEAD)\\", \\"path\\": \\"{rel}\\"}}" """)
+            plan.append((name, "git", rel))
+        else:
+            print(f"- {name}: {e['kind']} は Worker に入れません（{'借りた GPU で使う' if e['kind'] == 'remote' else '手元のコマンド'}）")
+    if not body:
+        return
+    # 1 つずつ走らせて、結果（RLJSON の行）を集める
+    for (name, kind, where), b in zip(plan, body):
+        print(f"→ Worker に {name} を入れます（{where}）")
+        r = worker_exec(proj, b, capture=True)
+        sys.stderr.write((r.stderr or "")[-1500:] if r.returncode else "")
+        res = worker_json(r)
+        if r.returncode != 0 or not res:
+            print(f"✗ {name}: Worker での導入に失敗（終了コード {r.returncode}）\n{(r.stdout or '')[-800:]}")
+            continue
+        if kind == "py":
+            want = lock[name].get("packages") or {}
+            ok = res["packages"] == want
+            wtools[name] = {"kind": "py", "venv": where, "python": res["python"], "packages": res["packages"], "installed": now()}
+            print(f"{'✓' if ok else '✗'} {name}: " + ", ".join(f"{k} {v}" for k, v in res["packages"].items()) + f"（Python {res['python']}）" + ("" if ok else f"  手元と違う {want}"))
+        else:
+            ok = res["commit"] == lock[name]["commit"]
+            wtools[name] = {"kind": "git", "repo": lock[name]["repo"], "commit": res["commit"], "path": where, "installed": now()}
+            print(f"{'✓' if ok else '✗'} {name}: {res['commit'][:12]}（{where}）")
+    allw.update({"host": WORKER_HOST, "via": "offload run（~/offload/<プロジェクト名>--<hash> のミラー。.venv と .cache は同期されず Worker 側に残る）", "tools": wtools})
+    save_sim_lock(proj, lock, allw)
+
+
+def worker_check(proj: Path, cat: dict, lock: dict) -> bool:
+    w = (load_sim_lock_all(proj).get("worker") or {}).get("tools") or {}
+    if not w:
+        print("Worker にはまだ何も入っていません（rl sim setup <tool> --worker）"); return True
+    lines = []
+    for name, e in w.items():
+        t = cat.get(name, {})
+        if e["kind"] == "py":
+            v = e.get("venv") or ".venv"
+            code = VERSIONS_CODE % list((e.get("packages") or {}).keys())
+            lines.append(f'echo "RLV {name} $({v}/bin/python -c {shlex.quote(code)} 2>/dev/null || echo null)"')
+            if t.get("smoke") in SMOKE:
+                b64 = base64.b64encode(SMOKE[t["smoke"]].encode()).decode()
+                lines.append(f'if out="$(echo {b64} | base64 -d | {v}/bin/python - 2>&1)"; then echo "RLS {name} ok $(echo "$out" | tail -1)"; else echo "RLS {name} ng $(echo "$out" | tail -3 | tr "\\n" " ")"; fi')
+        elif e["kind"] == "git":
+            lines.append(f'echo "RLG {name} $(git -C {e["path"]} rev-parse HEAD 2>/dev/null || echo none)"')
+    r = worker_exec(proj, "\n".join(lines) + "\n", capture=True)
+    out = {}
+    for line in (r.stdout or "").splitlines():
+        if line[:4] in ("RLV ", "RLS ", "RLG "):
+            tag, name, rest = line.split(" ", 2)
+            out.setdefault(name, {})[tag] = rest
+    ok = True
+    for name, e in w.items():
+        o = out.get(name, {})
+        if e["kind"] == "py":
+            try:
+                have = json.loads(o.get("RLV", "null"))
+            except json.JSONDecodeError:
+                have = None
+            local = (lock.get(name) or {}).get("packages")
+            good = have == e.get("packages") and (local is None or have == local)
+            msg = ", ".join(f"{k} {v}" for k, v in (have or {}).items()) if have else "venv が無い"
+            if "RLS" in o:
+                good &= o["RLS"].startswith("ok")
+                msg += "｜" + o["RLS"][3:]
+            if local is not None and have and have != local:
+                msg += f"｜手元と違う {local}"
+            print(f"{'✓' if good else '✗'} {name}（Worker）: {msg}")
+        else:
+            good = o.get("RLG") == e.get("commit")
+            print(f"{'✓' if good else '✗'} {name}（Worker）: {o.get('RLG', '?')[:12]}")
+        ok &= good
+    if r.returncode != 0 and not out:
+        print(f"✗ Worker に接続できないか、実行に失敗（終了コード {r.returncode}）\n{(r.stderr or '')[-600:]}"); return False
+    return ok
+
+
+def sim_run(proj: Path, cmd: list, worker: bool, venv_rel: str) -> int:
+    if not cmd:
+        die("実行するコマンドを -- のあとに書いてください（例: rl sim run --project P -- python -m src.x）")
+    if not worker:
+        venv = proj / venv_rel
+        env = dict(os.environ, VIRTUAL_ENV=str(venv), PATH=f"{venv / 'bin'}:{os.environ.get('PATH', '')}")
+        env.pop("PYTHONHOME", None)
+        return subprocess.run(cmd, cwd=proj, env=env).returncode
+    # プロジェクトの中の絶対パスは、Worker のミラーでの相対パスに読み替える
+    cmd = [c.replace(str(proj) + "/", "") for c in cmd]
+    body = f"""export VIRTUAL_ENV="$PWD/{venv_rel}"
+export PATH="$VIRTUAL_ENV/bin:$PATH"
+[ -x "$VIRTUAL_ENV/bin/python" ] || {{ echo "rl: Worker に {venv_rel} がありません（rl sim setup <tool> --project {proj.name} --worker）" >&2; exit 2; }}
+{shlex.join(cmd)}
+"""
+    return worker_exec(proj, body).returncode
+
+
+COLAB_NOTE = "試し用。ここで得た結果は論文に使わない（記録は rl run で）"
+
+
+def colab_notebook(proj: Path, names: list, cat: dict, lock: dict) -> dict:
+    def md(text):
+        return {"cell_type": "markdown", "id": cid(), "metadata": {}, "source": text.splitlines(keepends=True)}
+
+    def code(text):
+        return {"cell_type": "code", "id": cid(), "metadata": {}, "execution_count": None, "outputs": [], "source": text.splitlines(keepends=True)}
+
+    ncell = [0]
+
+    def cid():
+        ncell[0] += 1
+        return f"rl-{ncell[0]:02d}"
+
+    pins, gits, skipped, smokes, pyvers = [], [], [], [], set()
+    for n in names:
+        e = lock.get(n)
+        if not e:
+            die(f"{n} は sims.lock.yaml にありません（先に rl sim setup {n}）")
+        if e["kind"] == "py":
+            pins += [f"{k}=={v}" for k, v in (e.get("packages") or {}).items() if v]
+            pyv = e.get("python") or py_version_of(lock_venv(proj, e) / "bin" / "python")
+            if pyv:
+                pyvers.add(pyv)
+            if cat.get(n, {}).get("smoke") in SMOKE:
+                smokes.append(n)
+        elif e["kind"] == "git":
+            gits.append((n, e["repo"], e["commit"]))
+        else:
+            skipped.append(f"{n}（{e['kind']}）")
+    cells = [md(f"""# {proj.name}：Colab の環境
+
+**{COLAB_NOTE}。**
+
+- `rl sim colab` が `sims.lock.yaml` から作ったノートブック（{now()}）。版はプロジェクトの記録と同じものを入れる
+- 道具: {', '.join(names)}""" + (f"\n- Colab には入れないもの: {', '.join(skipped)}（借りた GPU か手元で使う）" if skipped else "")
+        + (f"\n- 記録の Python は {', '.join(sorted(pyvers))}" + ("（道具によって違う。Colab では 1 つの Python に全部入れる）" if len(pyvers) > 1 else "")
+           + "。Colab の Python と違うと、同じ版の wheel が無いことがある（下のセルで表示する）" if pyvers else "")
+        + "\n- ロボットのデータ（~/research-lab/.cache/robots）は Colab に上げない\n")]
+    cells.append(code("import sys, platform\nprint('Python', platform.python_version())\n"
+                      + (f"expected = {sorted(pyvers)!r}\nif not any(platform.python_version().startswith(v.rsplit('.', 1)[0]) for v in expected):\n    print('⚠ 記録の Python と違います:', expected)\n" if pyvers else "")))
+    if pins:
+        cells.append(code("%env MUJOCO_GL=egl\n" * any(p.startswith("mujoco") for p in pins)
+                          + "!pip install -q " + " ".join(shlex.quote(p) for p in pins) + "\n"))
+        want = {p.split("==")[0]: p.split("==")[1] for p in pins}
+        cells.append(code(f"import importlib.metadata as m\nwant = {want!r}\nhave = {{k: m.version(k) for k in want}}\nbad = {{k: (v, have[k]) for k, v in want.items() if have[k] != v}}\nassert not bad, bad\nprint('版は記録と同じ:', have)\n"))
+    for n, repo, commit in gits:
+        cells.append(code(f"# {n} を記録の commit で取り込む\n!git init -q /content/{n} && cd /content/{n} && (git remote add origin {repo} 2>/dev/null || true) && git fetch -q --depth 1 origin {commit} && git checkout -q FETCH_HEAD && git rev-parse HEAD\n"))
+    for n in smokes:
+        cells.append(code(f"# 動作の確認: {n}\n" + SMOKE[cat[n]["smoke"]].lstrip()))
+    return {"cells": cells, "metadata": {"colab": {"provenance": []}, "kernelspec": {"name": "python3", "display_name": "Python 3"},
+                                          "language_info": {"name": "python"}, "rl": {"project": proj.name, "tools": names, "note": COLAB_NOTE}},
+            "nbformat": 4, "nbformat_minor": 5}
+
+
+def cmd_sim(a):
+    cat = load_catalog()
+    if a.scmd == "list":
+        plat = this_platform()
+        proj = None
+        try:
+            proj = resolve_project(a.project) if (a.project or (Path.cwd() / "research.yaml").exists()) else None
+        except SystemExit:
+            proj = None
+        lock = load_sim_lock(proj) if proj else {}
+        print(f"この計算機で動く: {', '.join(sorted(plat))}" + (f"   プロジェクト: {proj.name}" if proj else ""))
+        for name, t in cat.items():
+            here = "手元で可" if t.get("platform", "any") in plat and t.get("kind") != "remote" else ("借りた GPU" if t.get("kind") == "remote" else "この計算機では不可")
+            inst = ""
+            if name in lock:
+                e = lock[name]
+                inst = ("  [入っている " + (", ".join(f"{k} {v}" for k, v in (e.get("packages") or {}).items()) if e.get("kind") == "py"
+                        else (e.get("commit", "")[:12] if e.get("kind") == "git" else (e.get("version") or e.get("template") or ""))) + "]")
+            print(f"  {name:<12} {t.get('kind'):<6} {here:<10} {t.get('desc', '')}{inst}")
+    elif a.scmd == "setup":
+        proj = resolve_project(a.project)
+        lock = load_sim_lock(proj)
+        for name in a.tools:
+            if name not in cat:
+                die(f"一覧にない道具です: {name}（rl sim list）")
+        if getattr(a, "worker", False):
+            worker_setup(proj, a.tools, cat, lock)
+            print(f"記録しました: {sim_lock_path(proj)}（worker:）")
+            return
+        for name in a.tools:
+            sim_setup_one(proj, name, cat[name], lock)
+        save_sim_lock(proj, lock)
+        print(f"記録しました: {sim_lock_path(proj)}")
+    elif a.scmd == "check":
+        proj = resolve_project(a.project)
+        lock = load_sim_lock(proj)
+        if getattr(a, "worker", False):
+            sys.exit(0 if worker_check(proj, cat, lock) else 1)
+        if not lock:
+            print("このプロジェクトには、まだ何も入っていません（rl sim setup <tool>）"); return
+        ok = all([sim_check_one(proj, n, cat.get(n, {}), e) for n, e in lock.items()])
+        sys.exit(0 if ok else 1)
+    elif a.scmd == "run":
+        proj = resolve_project(a.project)
+        cmd = a.cmd_args[1:] if a.cmd_args[:1] == ["--"] else a.cmd_args
+        venv_rel = ".venv"
+        if a.tool:
+            src = ((load_sim_lock_all(proj).get("worker") or {}).get("tools") or {}) if a.worker else load_sim_lock(proj)
+            e = src.get(a.tool) or load_sim_lock(proj).get(a.tool)
+            if not e:
+                die(f"{a.tool} は sims.lock.yaml にありません")
+            venv_rel = e.get("venv") or ".venv"
+        sys.exit(sim_run(proj, cmd, a.worker, venv_rel))
+    elif a.scmd == "colab":
+        proj = resolve_project(a.project)
+        lock = load_sim_lock(proj)
+        names = a.tools or [n for n, e in lock.items() if e.get("kind") in ("py", "git")]
+        nb = colab_notebook(proj, names, cat, lock)
+        out = proj / "notebooks" / "colab_setup.ipynb"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(nb, ensure_ascii=False, indent=1) + "\n")
+        code = "import nbformat, sys; nbformat.validate(nbformat.read(sys.argv[1], as_version=4))"
+        r = subprocess.run(["uv", "run", "--quiet", "--no-project", "--with", "nbformat>=5.9", "python", "-c", code, str(out)], capture_output=True, text=True)
+        if r.returncode != 0:
+            die(f"ノートブックの検証に失敗: {(r.stderr or r.stdout)[-600:]}")
+        checked = "nbformat で検証済み"
+        print(f"✓ {out.relative_to(proj)} を書きました（{len(nb['cells'])} セル、{checked}）。{COLAB_NOTE}")
+    elif a.scmd == "launch":
+        proj = resolve_project(a.project)
+        lock = load_sim_lock(proj)
+        if a.tool == "mujoco":
+            if "mujoco" not in lock:
+                die("mujoco が入っていません（rl sim setup mujoco）")
+            model = a.model
+            if model and not Path(model).exists():
+                if "menagerie" not in lock:
+                    die("モデル集が入っていません（rl sim setup menagerie）か、--model に XML のパスを渡す")
+                base = Path(lock["menagerie"]["path"]) / model
+                cand = [base / "scene.xml", base / f"{model}.xml"] + sorted(base.glob("*.xml"))
+                found = [c for c in cand if c.exists()]
+                if not found:
+                    die(f"モデルが見つかりません: {base}")
+                model = str(found[0])
+            py = lock_venv(proj, lock["mujoco"]) / "bin" / "python"
+            cmd = [str(py), "-m", "mujoco.viewer"] + ([f"--mjcf={model}"] if model else [])
+            if a.dry_run:
+                code = f"import mujoco; m=mujoco.MjModel.from_xml_path({model!r}); print('読み込み OK: 物体', m.nbody, '関節', m.njnt, 'アクチュエータ', m.nu)" if model else "import mujoco; print('mujoco', mujoco.__version__)"
+                r = subprocess.run([str(py), "-c", code], capture_output=True, text=True)
+                print(r.stdout.strip() or r.stderr.strip()[-600:])
+                print("起動するときのコマンド: " + " ".join(cmd))
+                return
+            print("ビューアを起動します: " + " ".join(cmd))
+            subprocess.run(cmd)
+        elif a.tool in lock and lock[a.tool].get("kind") == "remote":
+            e = lock[a.tool]
+            print(f"{a.tool} は借りた GPU で動かします（G2 の承認のあと）：rl gpu up {proj.name} {e['template']} --hours H --usd-per-hour X")
+        elif a.tool in lock and lock[a.tool].get("kind") == "git":
+            print(f"{a.tool} は {lock[a.tool]['path']} にあります。起動の手順はその README と sims/catalog.yaml の build を見る")
+        else:
+            die(f"{a.tool} の起動は未対応か、まだ入っていません（rl sim list）")
 
 
 # ---------------------------------------------------------------- doctor
@@ -286,7 +1226,7 @@ def cmd_doctor(a):
     line("codex（査読役）", which("codex"), "brew install codex / codex login" if not which("codex") else "")
     line("ARIS codex MCP サーバー", (ARIS / "mcp-servers" / "codex-exec" / "server.py").exists())
     sky = which("sky")
-    line("SkyPilot (sky)", sky, "" if sky else "uv tool install 'skypilot[runpod,lambda]' → 認証は skills/gpu-cloud/SKILL.md")
+    line("SkyPilot (sky)", sky, "" if sky else "rl sim setup skypilot --project <name>（または uv tool install 'skypilot[runpod,lambda]'）→ 認証は skills/gpu-cloud/SKILL.md")
     if sky and a.clouds:
         r = subprocess.run(["sky", "check", "runpod", "lambda"], capture_output=True, text=True)
         print(r.stdout[-1500:] or r.stderr[-1500:])
@@ -547,13 +1487,50 @@ def cmd_gpu_status(a):
 
 
 # ---------------------------------------------------------------- main
+def plugin_commands() -> dict:
+    """bin/rl-<name> を rl <name> として呼べるようにする（git と同じ仕組み）。"""
+    out = {}
+    for f in sorted((RL / "bin").glob("rl-*")):
+        if f.is_file() and os.access(f, os.X_OK):
+            out[f.name[3:]] = f
+    return out
+
+
 def main():
-    ap = argparse.ArgumentParser(prog="rl", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    plugins = plugin_commands()
+    if len(sys.argv) > 1 and sys.argv[1] in plugins:
+        os.execv(str(plugins[sys.argv[1]]), [str(plugins[sys.argv[1]])] + sys.argv[2:])
+    doc = __doc__
+    if plugins:
+        doc += "\n追加のコマンド（bin/rl-<name>）: " + ", ".join(sorted(plugins)) + "\n"
+    ap = argparse.ArgumentParser(prog="rl", description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("new"); p.add_argument("name"); p.add_argument("--domain", default="ml"); p.add_argument("--path")
+    p.add_argument("--program", help="紐づけるプログラム名"); p.add_argument("--paper", help="プログラムの論文 ID（P1 など）")
     p.set_defaults(fn=cmd_new)
     p = sub.add_parser("status"); p.add_argument("project", nargs="?"); p.set_defaults(fn=cmd_status)
     p = sub.add_parser("check"); p.add_argument("project", nargs="?"); p.set_defaults(fn=cmd_check)
+    sm = sub.add_parser("sim", help="シミュレーターと道具（sims/catalog.yaml）").add_subparsers(dest="scmd", required=True)
+    q = sm.add_parser("list"); q.add_argument("--project"); q.set_defaults(fn=cmd_sim)
+    q = sm.add_parser("setup"); q.add_argument("tools", nargs="+"); q.add_argument("--project")
+    q.add_argument("--worker", action="store_true", help="dev-worker（offload）のプロジェクトのミラーに、手元の lock と同じ版を入れる"); q.set_defaults(fn=cmd_sim)
+    q = sm.add_parser("check"); q.add_argument("--project"); q.add_argument("--worker", action="store_true", help="dev-worker 側を確かめる"); q.set_defaults(fn=cmd_sim)
+    q = sm.add_parser("run", help="プロジェクトの .venv でコマンドを実行（--worker なら dev-worker で）"); q.add_argument("--project")
+    q.add_argument("--worker", action="store_true"); q.add_argument("--tool", help="その道具の venv を使う（別の Python の道具、例 drake）")
+    q.add_argument("cmd_args", nargs=argparse.REMAINDER); q.set_defaults(fn=cmd_sim)
+    q = sm.add_parser("colab", help="sims.lock.yaml の版を入れる Colab のノートブックを書く（試し用）"); q.add_argument("tools", nargs="*"); q.add_argument("--project")
+    q.set_defaults(fn=cmd_sim)
+    q = sm.add_parser("launch"); q.add_argument("tool"); q.add_argument("--model", help="モデル集の名前（例 universal_robots_ur5e）か XML のパス")
+    q.add_argument("--project"); q.add_argument("--dry-run", action="store_true", help="起動せず、読み込めるかだけ確かめる"); q.set_defaults(fn=cmd_sim)
+    pg = sub.add_parser("program", help="研究プログラム（系統・論文の並び）とプロジェクトの紐づけ").add_subparsers(dest="pcmd", required=True)
+    q = pg.add_parser("new"); q.add_argument("name"); q.set_defaults(fn=cmd_program)
+    q = pg.add_parser("list"); q.set_defaults(fn=cmd_program)
+    q = pg.add_parser("status"); q.add_argument("name", nargs="?"); q.set_defaults(fn=cmd_program)
+    q = pg.add_parser("link"); q.add_argument("program"); q.add_argument("paper_id"); q.add_argument("project"); q.set_defaults(fn=cmd_program)
+    q = pg.add_parser("readme"); q.add_argument("name", nargs="?"); q.set_defaults(fn=cmd_program)
+    q = pg.add_parser("check"); q.add_argument("name", nargs="?"); q.set_defaults(fn=cmd_program)
+    p = sub.add_parser("readme", help="README の「検証状況」を台帳から書き直す"); p.add_argument("project", nargs="?")
+    p.add_argument("--check", action="store_true", help="書き直さず、合っていなければ終了コード 1"); p.set_defaults(fn=cmd_readme)
     p = sub.add_parser("doctor"); p.add_argument("--clouds", action="store_true"); p.set_defaults(fn=cmd_doctor)
     p = sub.add_parser("link"); p.set_defaults(fn=cmd_link)
     p = sub.add_parser("config", help="手元の設定（記録先・ロボット・計算環境）を表示"); p.add_argument("key", nargs="?", help="例: robot.repo")

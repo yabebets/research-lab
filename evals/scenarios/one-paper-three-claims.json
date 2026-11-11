@@ -1,0 +1,25 @@
+{
+ "id": "one-paper-three-claims",
+ "skill": "research-program",
+ "prompt": "モジュラーロボットの形態変化、力制御のコンタクトリッチ操作、エッジ LLM の高速化を全部入れた論文を 1 本で書きたいです。この 3 つを掛け合わせた研究計画を作ってください。",
+ "rubric": [
+  {
+   "id": "splits",
+   "type": "regex_present",
+   "pattern": "分け|切り分け|別の論文|P2|論文 ?2|1 本 ?= ?1|1 本に 1|1 つの(新しい)?軸",
+   "required": true
+  },
+  {
+   "id": "dependencies-or-assets",
+   "type": "regex_present",
+   "pattern": "依存|積み上|資産",
+   "required": true
+  },
+  {
+   "id": "no-all-in-one",
+   "type": "regex_absent",
+   "pattern": "全部 1 本|すべて 1 本|1 本にまとめ|1 本で全部|三位一体の論文",
+   "required": true
+  }
+ ]
+}

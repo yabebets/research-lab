@@ -1,0 +1,27 @@
+# SkyPilot のタスク定義：cosmos-policy。rl sim setup cosmos-policy でプロジェクトの configs/sky/ に写し、rl gpu up <project> configs/sky/cosmos-policy.yaml --hours H --usd-per-hour X で立てる
+# G2（計画と予算の承認）のあとでだけ使う。使い終わったら rl gpu down（放置は自動で消える）
+# 重みは NVIDIA One-Way Noncommercial License（非商用）。土台の Cosmos-Predict2 は HF で同意が要る（gated）→ 人が HF で同意し、HF_TOKEN を SkyPilot の secrets で渡す
+name: rl-cosmos-policy
+
+resources:
+  infra: runpod            # lambda にするなら lambda
+  accelerators: {A100-80GB: 1, H100: 1}   # 推論・評価は 1 枚。学習は 80 GB ×8 以上（num_nodes と accelerators を増やす）
+  disk_size: 400
+
+workdir: .
+
+envs:
+  MAX_HOURS: 4             # rl gpu up が --hours で上書きする
+  COSMOS_POLICY_COMMIT: 18a2accadf4e7a3531e56754102af5a24d2316da
+
+secrets:
+  HF_TOKEN: null           # sky launch --secret HF_TOKEN で渡す（ファイルに書かない）
+
+setup: |
+  [ -d cosmos-policy ] || git clone -q https://github.com/NVlabs/cosmos-policy
+  cd cosmos-policy && git checkout -q "$COSMOS_POLICY_COMMIT"
+  # 環境は SETUP.md の Docker の手順。コンテナの中では uv run --extra cu128 --group libero --python 3.10 で動かす（README）。版は commit で固定
+
+run: |
+  cd cosmos-policy
+  timeout "${MAX_HOURS}h" bash -c 'echo "実験のスクリプトに置き換える（LIBERO の評価は README）"'

@@ -64,5 +64,14 @@ rl gpu down <project> <cluster>
 | 7B 前後のフル微調整・大きめの学習 | H100 / A100 を 4〜8 枚（Orchestra `08-distributed-training`） |
 | 推論・評価だけ | 安い GPU で vLLM（Orchestra `12-inference-serving/vllm`） |
 | Isaac Sim / Isaac Lab | RTX 系（レイトレーシング用の RT コアが要る。A100 / H100 では描画が動かない） |
+| π0・π0.5 の LoRA（openpi） | RTX 4090（22.5 GB 以上）。全体の微調整は A100-80GB / H100 |
+| Cosmos Policy の学習 | 80 GB ×8 以上（論文は H100 ×8〜64 で 48 時間）。推論は 10 GB 以上の 1 枚 |
 
 最初は必ず小さく（短い時間・少ないデータ）で動作確認してから本番を立てる。
+
+## 道具の導入（rl sim）
+
+- SkyPilot は `rl sim setup skypilot --project <name>` で入れる（版がプロジェクトの `sims.lock.yaml` に残る）。RunPod・Lambda のアカウントと支払いの設定は人の作業
+- タスク定義のひな形は `templates/sky/`：Isaac Lab・Isaac Gym・ManiSkill・Genesis・MJX・MuJoCo Warp、方策の openpi（Ubuntu 22.04 の Docker イメージ）・OpenVLA-OFT・Cosmos Policy。`rl sim setup <tool>` でプロジェクトの `configs/sky/` に写し、`rl gpu up <project> configs/sky/<tool>.yaml --hours H --usd-per-hour X` で立てる。リポジトリは catalog の commit で固定してある
+- 重みの取得に HF の同意が要るもの（Cosmos-Predict2 など）は、人が HF で同意してから、トークンを `sky launch --secret HF_TOKEN` で渡す（ファイルに書かない）
+- GPU の要らない重い処理（テスト・前処理）は、先に dev-worker（`rl sim run --worker`）で回せないか考える。費用がかからない

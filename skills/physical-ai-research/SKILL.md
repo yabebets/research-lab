@@ -28,6 +28,15 @@ description: フィジカル AI・ロボティクス研究（模倣学習・VLA�
 
 研究プロジェクトのコードは `rl new` で作ったプロジェクトに置く。ロボットのドライバ・校正・道具は `robot.repo` を参照し、コピーしない。
 
+## ロボットの公開データ（rl robot）
+
+他のロボットの CAD・手順書・部品表は `~/research-lab/robots/catalog.yaml` に一覧がある（取得元の commit・ライセンス・登録が要るもの・派生物）。プロジェクトに直接ダウンロードせず、`rl robot fetch <robot>` で共有のキャッシュに取り、`rl robot link <robot> --project <name>` でリンクして使う。版と sha256 は `robots.lock.yaml` に残る。
+
+- 一覧に無い機種を足すときは catalog.yaml に 1 項目（取得元の commit かタグ・取得の方法・ハード／文書／ソフトのライセンス・他社の部品の除外・登録が要るもの）。ログイン・メール登録・同意のクリックが要るものは `gated:` に書くだけで、自動で取らない
+- 既にプロジェクトに置いてしまったデータは `rl robot migrate --project <name>`（下見）→ `--apply`
+- 派生物（STEP からのメッシュなど）は、作ったスクリプトと版を catalog の `derived:` に書く。他社の部品モデル（モータ・ねじ・電池）は再配布しない
+- データは公開しない（research-lab は公開リポジトリ。キャッシュは git の管理外）
+
 ## 研究の型と使う道具
 
 | 型 | よくある問い | 道具 |
@@ -70,3 +79,16 @@ description: フィジカル AI・ロボティクス研究（模倣学習・VLA�
 - 限界（物体の種類・環境の範囲・安全面）
 
 学会別の査読の観点は `venue-review`。
+
+## シミュレーターと道具を入れる（rl sim）
+
+シミュレーターと道具は `~/research-lab/sims/catalog.yaml` に一覧がある。プロジェクトに入れるときは手で pip せず `rl sim setup <tool> --project <name>` を使い、入った正確な版（モデル集は commit）をプロジェクトの `sims.lock.yaml` に残す。
+
+- 手元（Mac）で動く：`mujoco`、`menagerie`（UR5e・Robotiq 2F-85・Franka・ALOHA・Unitree G1 などのモデル集）、`drake`（MultibodyPlant。Python 3.12 の別の venv）、`lerobot`（ACT・SmolVLA。Python 3.12 の別の venv、MPS で小さく学習）、`geom`（trimesh・fcl）、`cad`（OCP）、`asap`、`fabrica`（計画部）
+- 借りた GPU で動かす：`isaaclab`・`isaacgym`（RTX 系）、`maniskill`・`genesis`・`mjx`・`mujoco-warp`（CUDA）、方策の `openpi`（π0・π0.5）・`openvla-oft`・`cosmos-policy`。`rl sim setup` は `configs/sky/<tool>.yaml` を置くだけで、立てるのは G2 の承認のあとの `rl gpu up`
+- **重みのライセンスはコードと別**：π0・π0.5 は Gemma の利用条件、Cosmos Policy は NVIDIA の非商用、OpenVLA は MIT（土台の Llama 2 の条件は別に確認）、SmolVLA は Apache-2.0。論文・公開物に使う前に確かめる
+- dev-worker（2 台目の Mac。GPU なし）で回すとき：`rl sim setup <tool> --project <name> --worker` で同じ版を入れ、`rl sim run --project <name> --worker -- <cmd>`。確かめるのは `rl sim check --worker`
+- Colab で試すとき：`rl sim colab --project <name>` で同じ版を入れるノートブックを作る。**Colab の結果は試し用で、論文に使わない**（記録は `rl run` で）
+- 確かめる：`rl sim check`（版の食い違いと、簡単な動作の確認）
+- 起動する：`rl sim launch mujoco --model universal_robots_ur5e`（`--dry-run` で読み込めるかだけ確かめる）
+- 一覧に無い道具を足すときは `sims/catalog.yaml` に 1 項目足す（版の範囲・ライセンス・動く計算機・確認の手順。Python の版の制約は `python:`）

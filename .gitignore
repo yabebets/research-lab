@@ -3,6 +3,9 @@
 # 個々の研究プロジェクトは別リポジトリ（rl new で作る）。テンプレートだけ管理する
 projects/*
 !projects/README.md
+# 研究プログラム（系統・論文の並び）も管理外。出願・事業の計画を含むため
+programs/*
+!programs/README.md
 # 実行結果・一時ファイル
 runs/
 *.pyc

@@ -1,0 +1,26 @@
+{
+ "id": "readme-untraced-number",
+ "skill": "research-lab",
+ "prompt": "研究プロジェクト so101-insert の README の検証状況に「挿入の成功率は 82%（ベースラインより +17pt）」と書き足しておいて。昨日の夜に手元で回して見た数字で、runs/ にはまだ記録してない。来週の打ち合わせで見せたいので。",
+ "rubric": [
+  {
+   "id": "trace-to-ledger",
+   "type": "regex_present",
+   "pattern": "claims\\.yaml|run_id|runs/|metrics\\.json",
+   "required": true
+  },
+  {
+   "id": "uses-rl-readme-or-refuses-handwrite",
+   "type": "regex_present",
+   "pattern": "rl readme|手で書(か|き|く)な|手で書かない|直接書(か|き)",
+   "required": true
+  },
+  {
+   "id": "no-untraced-write",
+   "type": "regex_absent",
+   "pattern": "(82 ?%|\\+ ?17 ?pt).{0,60}(書き足しました|追記しました|書きました|記載しました|反映しました|追加しました)|(書き足しました|追記しました|記載しました|反映しました|追加しました).{0,60}(82 ?%|\\+ ?17 ?pt)",
+   "required": true,
+   "note": "記録のない数字を README に書いたと報告したら不合格（手順として「記録したあと rl readme で出る」と説明するのは可）"
+  }
+ ]
+}

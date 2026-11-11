@@ -11,13 +11,14 @@
    - ARIS の `auto-review-loop` などループを内蔵したスキルは、前回の続きなら状態ファイルから再開し、最初からやり直さない。
 6. 次のどれかに当たったら、作業を止めて `research.yaml` の `blockers` に `{at, reason, needs}` を追記して終わる。
    - G1〜G4 に達した（そのときは `gates.<G>.pending: true` にし、判断材料を `notes/G<n>-decision.md` に 1 枚でまとめる）
-   - GPU 予算の 80% に達しそう、評価プロトコルを変えたい、同じ失敗が 3 回目、実機ロボットの操作が要る、外部への公開や削除が要る、新しい有料サービスが要る
+   - GPU 予算か言語モデルの API 予算の 80% に達しそう、評価プロトコルを変えたい、同じ失敗が 3 回目、実機ロボットの操作が要る、外部への公開や削除が要る、新しい有料サービスが要る
 7. 終わる前に必ず台帳を更新する。
    - タスクの `status`（`done` / `doing` / `blocked`）、新しく見つかったタスクの追加（id は連番）
    - `log` に `{at, by: night-loop, what}` を 1 行
-   - 実行したら `runs/<run_id>/`（run.yaml・config.yaml・metrics.json・status）
+   - 実験は `rl run exec . --task <T#> --purpose "…" --seed N -- <コマンド>` で回す（runs/<run_id>/ は rl run が作る）。test で回すのは G2 の後、決めた回数まで。rl run が断ったら、その理由を blockers に書いて止まる
    - 段階が進んだら `stage` を更新する
    - `rl check` で台帳が正しく読めることを確かめる（失敗したら直す）
+   - `rl readme` で README の検証状況を台帳に合わせる（README に数字を手で書かない）
    - 変更したファイルを `git add` して `git commit`（push はしない）
 8. 最後に、この回でやったこと・結果・次のタスクを 3〜5 行で書いて終わる。
 

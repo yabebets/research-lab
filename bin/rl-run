@@ -1,0 +1,316 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["ruamel.yaml>=0.18"]
+# ///
+"""rl run — 実行を runs/<run_id>/ に記録する
+
+  rl run exec [project] --task T# --purpose "…" [--split dev|val|test] [--seed N] [--config path]
+              [--tag x]... [--data V] [--cluster C] [--timeout-hours H] [--no-metrics] -- <command…>
+      run フォルダを作り、コマンドを実行し、log.txt・run.yaml・status を書く。
+      子には RL_RUN_DIR・RL_RUN_ID・RL_PROJECT・RL_PROJECT_NAME・RL_SPLIT・RL_TASK・RL_SEED を渡す。
+      コマンドは $RL_RUN_DIR/metrics.json に最終指標を書く（なければ failed。書かない実行は --no-metrics）。
+  rl run start [project] --task T# --purpose "…" [--split] [--seed] [--config] [--tag]   手で回す実行の開始
+  rl run finish [project] [run_id] [--exit-code N] [--status S] [--reason "…"] [--log file] [--no-metrics]
+  rl run list [project] [--split dev|val|test] [--status S]
+  rl run show [project] <run_id>
+
+test の評価は G2 の承認後だけ、protocol.max_test_evals 回まで。事前登録（prereg.lock.yaml）がずれていたら拒否する。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import pathlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "lib"))
+from rlkit.common import resolve_project, load, dump, add_log, die  # noqa: E402
+from rlkit import runs  # noqa: E402
+
+
+class Stop(Exception):
+    pass
+
+
+def _on_signal(signum, frame):  # noqa: ARG001
+    raise Stop(signal.Signals(signum).name)
+
+
+def check_task(led, task):
+    ids = [t.get("id") for t in (led.get("tasks") or [])]
+    if task not in ids:
+        print(f"rl: ⚠ タスク {task} が research.yaml の tasks にありません（記録はします）", file=sys.stderr)
+
+
+def guard(proj, led, split, no_metrics=False):
+    if split == "test" and no_metrics:
+        die("test の評価には metrics.json が要ります（--no-metrics と --split test は一緒に使えません）")
+    errs, warns = runs.split_guard(proj, led, split)
+    for w in warns:
+        print(f"rl: ⚠ {w}", file=sys.stderr)
+    if errs:
+        print("rl: 実行を断りました:", file=sys.stderr)
+        for e in errs:
+            print(f"    {e.strip()}" if e.startswith(" ") else f"  ✗ {e}", file=sys.stderr)
+        sys.exit(2)
+
+
+def note_test(proj, rec):
+    """test の評価は台帳の log にも残す。"""
+    if rec.get("split") != "test":
+        return
+    led = load(proj / "research.yaml")
+    mx = (led.get("protocol") or {}).get("max_test_evals")
+    n = len(runs.test_runs(proj))
+    add_log(led, "rl", f"test 評価 {rec['run_id']}（{rec['status']}、{n}/{mx} 回目、{rec.get('task')}）")
+    dump(led, proj / "research.yaml")
+
+
+def summary(rec, run_dir):
+    print(f"\nrl: {rec['run_id']}  status={rec['status']}  経過 {runs.fmt_elapsed(rec.get('elapsed_sec'))}"
+          + (f"  理由: {rec['status_reason']}" if rec.get("status_reason") else ""), file=sys.stderr)
+    m = runs.read_metrics(run_dir)
+    if isinstance(m, dict):
+        print("rl: metrics " + json.dumps(m, ensure_ascii=False)[:400], file=sys.stderr)
+    if rec.get("llm"):
+        print(f"rl: LLM {rec['llm']['calls']} 回  ${rec['llm']['cost_usd']}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------- exec
+def cmd_exec(a, command):
+    if not command:
+        die("実行するコマンドを `--` の後ろに書いてください")
+    proj = resolve_project(a.project)
+    led = load(proj / "research.yaml")
+    check_task(led, a.task)
+    guard(proj, led, a.split, a.no_metrics)
+    timeout_h = a.timeout_hours
+    if timeout_h is None:
+        timeout_h = float((led.get("budget") or {}).get("max_run_hours") or 0)
+    try:
+        run_dir = runs.start(proj, led, task=a.task, purpose=a.purpose, split=a.split, seed=a.seed,
+                             config=a.config, tags=a.tag, command=command, data_version=a.data,
+                             cluster=a.cluster)
+    except FileNotFoundError as e:
+        die(str(e))
+    rec = runs.load_run_yaml(run_dir)
+    print(f"rl: {run_dir.name} を開始（{a.split}, {a.task}）→ {run_dir}", file=sys.stderr)
+    env = runs.child_env(proj, run_dir, rec)
+    log = (run_dir / "log.txt").open("wb")
+    killed, reason, code = False, None, None
+    for s in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(s, _on_signal)
+    try:
+        proc = subprocess.Popen(command, cwd=rec["cwd"], env=env, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    except OSError as e:
+        log.write(f"[rl] コマンドを起動できません: {e}\n".encode())
+        log.close()
+        rec = runs.finish(proj, run_dir, exit_code=127, reason=f"起動できません: {e}")
+        summary(rec, run_dir)
+        sys.exit(127)
+
+    def pump():
+        out = sys.stdout.buffer
+        fd = proc.stdout.fileno()
+        while True:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            try:
+                log.write(chunk)
+                log.flush()
+            except ValueError:   # 孫プロセスがパイプを持ったまま、ログを閉じた後
+                pass
+            try:
+                out.write(chunk)
+                out.flush()
+            except (BrokenPipeError, ValueError):
+                pass
+
+    t = threading.Thread(target=pump, daemon=True)
+    t.start()
+    deadline = time.time() + timeout_h * 3600 if timeout_h and timeout_h > 0 else None
+    try:
+        while True:
+            try:
+                code = proc.wait(timeout=1)
+                break
+            except subprocess.TimeoutExpired:
+                if deadline and time.time() > deadline:
+                    killed, reason = True, f"上限時間 {timeout_h}h を超えたので止めました（budget.max_run_hours / --timeout-hours）"
+                    raise Stop("timeout") from None
+    except (KeyboardInterrupt, Stop) as e:
+        killed = True
+        reason = reason or f"中断されました（{'Ctrl-C' if isinstance(e, KeyboardInterrupt) else e}）"
+        try:
+            proc.send_signal(signal.SIGINT)
+            code = proc.wait(timeout=10)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt, Stop):
+            proc.terminate()
+            try:
+                code = proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                code = proc.wait()
+    finally:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        t.join(timeout=5)
+        log.close()
+    rec = runs.finish(proj, run_dir, exit_code=code, killed=killed, no_metrics=a.no_metrics, reason=reason)
+    note_test(proj, rec)
+    summary(rec, run_dir)
+    sys.exit(0 if rec["status"] == "done" else (130 if killed else (code or 1)))
+
+
+# ---------------------------------------------------------------- start / finish
+def cmd_start(a):
+    proj = resolve_project(a.project)
+    led = load(proj / "research.yaml")
+    check_task(led, a.task)
+    guard(proj, led, a.split)
+    try:
+        run_dir = runs.start(proj, led, task=a.task, purpose=a.purpose, split=a.split, seed=a.seed,
+                             config=a.config, tags=a.tag, data_version=a.data, cluster=a.cluster)
+    except FileNotFoundError as e:
+        die(str(e))
+    rec = runs.load_run_yaml(run_dir)
+    print(f"# {run_dir.name} を開始しました。終わったら: rl run finish {proj} {run_dir.name}", file=sys.stderr)
+    for k, v in runs.child_env(proj, run_dir, rec).items():
+        if k.startswith("RL_"):
+            print(f"export {k}={v}")
+
+
+def cmd_finish(a):
+    if a.project and a.run_id is None and a.project.startswith("run_"):
+        a.project, a.run_id = None, a.project
+    proj = resolve_project(a.project)
+    ref = a.run_id or os.environ.get("RL_RUN_ID")
+    if not ref:
+        die("run_id を指定してください（または RL_RUN_ID を設定）")
+    run_dir = runs.find_run(proj, ref)
+    if run_dir is None:
+        die(f"run が見つかりません: {ref}")
+    if runs.read_status(run_dir) != "running":
+        die(f"{run_dir.name} は実行中ではありません（status={runs.read_status(run_dir)}）")
+    if a.log:
+        shutil.copyfile(a.log, run_dir / "log.txt")
+    rec = runs.finish(proj, run_dir, exit_code=a.exit_code, no_metrics=a.no_metrics,
+                      status=a.status, reason=a.reason)
+    note_test(proj, rec)
+    summary(rec, run_dir)
+    sys.exit(0 if rec["status"] == "done" else 1)
+
+
+# ---------------------------------------------------------------- list / show
+def _metric_brief(m, n=3):
+    if not isinstance(m, dict):
+        return "（metrics なし）" if m is None else "（読めない）"
+    items = [(k, v) for k, v in m.items() if k != "split"][:n]
+    return "  ".join(f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}" for k, v in items)
+
+
+def cmd_list(a):
+    proj = resolve_project(a.project)
+    rows = []
+    for r in runs.run_dirs(proj):
+        rec = runs.load_run_yaml(r)
+        m = runs.read_metrics(r)
+        split = rec.get("split") or (m.get("split") if isinstance(m, dict) else None) or "-"
+        st = runs.read_status(r)
+        if a.split and split != a.split:
+            continue
+        if a.status and st != a.status:
+            continue
+        rows.append((r.name, st, split, rec.get("task") or "-", str(rec.get("seed") if rec.get("seed") is not None else "-"),
+                     runs.fmt_elapsed(rec.get("elapsed_sec")), _metric_brief(m), (rec.get("purpose") or "")[:40]))
+    if not rows:
+        print("（run はありません）")
+        return
+    print("\t".join(("run_id", "status", "split", "task", "seed", "経過", "指標", "目的")))
+    for row in rows:
+        print("\t".join(row))
+    led = load(proj / "research.yaml")
+    print(f"\n{len(rows)} 件。test での評価: {len(runs.test_runs(proj))} / {(led.get('protocol') or {}).get('max_test_evals')} 回")
+
+
+def cmd_show(a):
+    proj = resolve_project(a.project)
+    run_dir = runs.find_run(proj, a.run_id)
+    if run_dir is None:
+        die(f"run が見つかりません（または候補が複数）: {a.run_id}")
+    print(f"# {run_dir.name}  status={runs.read_status(run_dir)}\n")
+    f = run_dir / "run.yaml"
+    print(f.read_text() if f.exists() else "（run.yaml なし）")
+    m = runs.read_metrics(run_dir)
+    print("## metrics.json")
+    print(json.dumps(m, ensure_ascii=False, indent=2) if isinstance(m, dict) else str(m))
+    lg = run_dir / "log.txt"
+    if lg.exists():
+        lines = lg.read_text(errors="replace").splitlines()
+        print(f"\n## log.txt（末尾 {min(15, len(lines))} 行 / {len(lines)} 行）")
+        print("\n".join(lines[-15:]))
+    files = sorted(p.relative_to(run_dir).as_posix() for p in run_dir.rglob("*") if p.is_file())
+    print("\n## ファイル\n" + "\n".join(f"  {x}" for x in files))
+
+
+# ---------------------------------------------------------------- main
+def _run_opts(p):
+    p.add_argument("project", nargs="?")
+    p.add_argument("--task", required=True, help="research.yaml の tasks の id（T3 など）")
+    p.add_argument("--purpose", required=True, help="この実行で何を確かめるか（1 文）")
+    p.add_argument("--split", default="dev", choices=runs.SPLITS)
+    p.add_argument("--seed", type=int)
+    p.add_argument("--config", help="設定ファイル（run の config.yaml にコピーする）")
+    p.add_argument("--tag", action="append", default=[], help="sim / real などの印（何度でも）")
+    p.add_argument("--data", help="データのバージョン（データセット名@版 など）")
+    p.add_argument("--cluster", help="GPU のクラスタ名（rl gpu up のもの。手元なら省略）")
+
+
+def main():
+    argv = sys.argv[1:]
+    command = []
+    if "--" in argv:
+        i = argv.index("--")
+        argv, command = argv[:i], argv[i + 1:]
+    ap = argparse.ArgumentParser(prog="rl run", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("exec", help="コマンドを実行して記録する（コマンドは -- の後ろ）")
+    _run_opts(p)
+    p.add_argument("--no-metrics", action="store_true", help="metrics.json を書かない実行（前処理など）")
+    p.add_argument("--timeout-hours", type=float, help="上限時間（既定は budget.max_run_hours。0 で無制限）")
+    p = sub.add_parser("start", help="手で回す実行を始める（RL_* の export を出力）")
+    _run_opts(p)
+    p = sub.add_parser("finish", help="start した実行を仕上げる")
+    p.add_argument("project", nargs="?")
+    p.add_argument("run_id", nargs="?")
+    p.add_argument("--exit-code", type=int, default=0)
+    p.add_argument("--status", choices=("done", "failed", "killed"))
+    p.add_argument("--reason")
+    p.add_argument("--log", help="ログのファイル（log.txt にコピーし、末尾 2 MB に切る）")
+    p.add_argument("--no-metrics", action="store_true")
+    p = sub.add_parser("list")
+    p.add_argument("project", nargs="?")
+    p.add_argument("--split", choices=runs.SPLITS)
+    p.add_argument("--status", choices=runs.STATUSES)
+    p = sub.add_parser("show")
+    p.add_argument("project", nargs="?")
+    p.add_argument("run_id")
+    a = ap.parse_args(argv)
+    if a.cmd == "exec":
+        cmd_exec(a, command)
+    elif command:
+        die("`--` の後ろのコマンドは rl run exec でだけ使います")
+    else:
+        {"start": cmd_start, "finish": cmd_finish, "list": cmd_list, "show": cmd_show}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,4 @@
+60baa5b0d5b953b75b7d5d6a6af09212a78cf3fd14f791b538396065576e701c  ./Orcahand_BaseV2_Left.zip
+6c87e10c1c9eae19187635240e642b4ec24f2b4417f2536902d5c6adbd15ea3b  ./base_left_tree.json
+624449b7c5a1ebd6abb7d64fd07f4066343c22d8f12fef4de19cb01701f3e618  ./x/Base_Left.step
+06e29abccbe59316d21020647c40a257de47792408f498ac3f5928104a36d0db  ./x/__MACOSX/._Base_Left.step
